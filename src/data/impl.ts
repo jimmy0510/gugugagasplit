@@ -25,6 +25,7 @@ const impl: Repository = {
   saveExpense: remote.saveExpense,
   deleteExpense: async (expenseId) => remote.deleteExpense(expenseId),
   saveTransfer: remote.saveTransfer,
+  deleteTransfer: async (transferId) => remote.deleteTransfer(transferId),
   attachReceipt: remote.attachReceipt,
   removeReceipt: async (receiptId) => remote.removeReceipt(receiptId),
   createInvite: remote.createInvite,

@@ -276,6 +276,15 @@ export async function updateGroup(
   bump();
 }
 
+export async function deleteTransfer(transferId: string): Promise<void> {
+  const { error } = await supabase
+    .from('transfers')
+    .update({ deleted_at: nowIso() })
+    .eq('id', transferId);
+  fail('刪除還款', error);
+  bump();
+}
+
 export async function deleteExpense(expenseId: string): Promise<void> {
   const { error } = await supabase
     .from('expenses')

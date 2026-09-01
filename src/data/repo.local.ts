@@ -506,6 +506,23 @@ export function markGroupDeleted(groupId: string): void {
   bump();
 }
 
+export function deleteTransfer(transferId: string, groupId: string): void {
+  const ts = now();
+  sqlite.withTransactionSync(() => {
+    db.update(transfers)
+      .set({ deletedAt: ts, updatedAt: ts })
+      .where(eq(transfers.id, transferId))
+      .run();
+    enqueue({
+      op: 'update',
+      target: 'transfers',
+      payload: { id: transferId, values: { deleted_at: ts } },
+    });
+  });
+  bump();
+  kick();
+}
+
 export function deleteExpense(expenseId: string, groupId: string): void {
   const ts = now();
   sqlite.withTransactionSync(() => {

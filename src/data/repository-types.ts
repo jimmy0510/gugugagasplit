@@ -50,6 +50,7 @@ export interface Repository {
   saveExpense(input: SaveExpenseInput): Promise<string>;
   deleteExpense(expenseId: string, groupId: string): Promise<void>;
   saveTransfer(input: SaveTransferInput): Promise<string>;
+  deleteTransfer(transferId: string, groupId: string): Promise<void>;
 
   /** 把已經拍好／選好並壓縮完的收據掛到某筆支出上 */
   attachReceipt(input: {

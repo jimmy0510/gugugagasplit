@@ -1,10 +1,10 @@
 import { Link, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { computeNetBalances, currenciesOf, formatWithCurrency } from '@/domain';
 import { useGroupRealtime } from '@/data/realtime';
-import { useGroup } from '@/data/repository';
+import { repository, useGroup } from '@/data/repository';
 import { getUserId } from '@/data/supabase';
 import {
   Banner,
@@ -41,6 +41,9 @@ export function GroupBody({ groupId }: { groupId: string }) {
   // 其他成員改了東西，畫面自己更新，不用手動重整
   useGroupRealtime(groupId);
 
+  // 正在確認要不要刪掉的那筆還款。刪除是不可逆的，不給一步到位的按鈕。
+  const [confirmTransfer, setConfirmTransfer] = useState<string | null>(null);
+
   const view = useMemo(() => {
     if (!snapshot) return null;
 
@@ -59,7 +62,26 @@ export function GroupBody({ groupId }: { groupId: string }) {
     const nameOf = (memberId: string) =>
       snapshot.members.find((m) => m.id === memberId)?.name ?? '（已移除）';
 
-    const sorted = [...snapshot.expenses].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+    /**
+     * 支出與還款排在同一條時間軸上。
+     *
+     * 還款本來只反映在結餘上，帳目列表看不到，所以「我明明還過錢」這件事
+     * 沒有任何憑據，只能從餘額變化反推。兩者都是「錢動了」，就該一起列。
+     */
+    const sorted = [
+      ...snapshot.expenses.map((expense) => ({
+        kind: 'expense' as const,
+        id: expense.id,
+        paidAt: expense.paidAt,
+        expense,
+      })),
+      ...snapshot.transfers.map((transfer) => ({
+        kind: 'transfer' as const,
+        id: transfer.id,
+        paidAt: transfer.paidAt,
+        transfer,
+      })),
+    ].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
 
     /**
      * 依「欠最多 → 應收最多」排序，以群組主幣別為準。
@@ -171,16 +193,101 @@ export function GroupBody({ groupId }: { groupId: string }) {
             onPress={() => router.push(`/expense/edit?groupId=${groupId}`)}
           />,
 
-          <Title key="expenses-title">支出</Title>,
+          <Title key="expenses-title">支出與還款</Title>,
 
           view.sorted.length === 0 ? (
-            <Empty key="empty" title="還沒有任何支出" hint="按上面的按鈕記第一筆" />
+            <Empty key="empty" title="還沒有任何紀錄" hint="按上面的按鈕記第一筆" />
           ) : (
             <View key="expenses">
               {spaced(
-                view.sorted.map((expense, index) => {
+                view.sorted.map((entry, index) => {
                   const previous = view.sorted[index - 1];
-                  const showDate = !previous || dayKey(previous.paidAt) !== dayKey(expense.paidAt);
+                  const showDate = !previous || dayKey(previous.paidAt) !== dayKey(entry.paidAt);
+
+                  if (entry.kind === 'transfer') {
+                    const { transfer } = entry;
+                    const from = snapshot.members.find((m) => m.id === transfer.fromMemberId);
+                    const mine =
+                      view.me?.id === transfer.fromMemberId
+                        ? '我付出'
+                        : view.me?.id === transfer.toMemberId
+                          ? '我收到'
+                          : null;
+
+                    return (
+                      <View key={transfer.id} style={{ gap: spacing.sm }}>
+                        {showDate ? <Label>{formatDate(transfer.paidAt)}</Label> : null}
+                        {/* 還款沒有編輯畫面，點一下展開刪除確認 */}
+                        <Pressable
+                          onPress={() =>
+                            setConfirmTransfer((current) =>
+                              current === transfer.id ? null : transfer.id,
+                            )
+                          }>
+                        <Card>
+                          <Row>
+                            {from ? (
+                              <Avatar name={from.name} avatarPath={from.avatarPath} size={34} />
+                            ) : null}
+                            <View style={{ flex: 1 }}>
+                              <Heading>還款</Heading>
+                              <Caption>
+                                {`${view.nameOf(transfer.fromMemberId)} → ${view.nameOf(transfer.toMemberId)}`}
+                              </Caption>
+                              {transfer.note ? <Caption>{transfer.note}</Caption> : null}
+                            </View>
+                            <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                              <Mono size={15} weight="700">
+                                {formatWithCurrency(transfer.amountMinor, transfer.currency)}
+                              </Mono>
+                              {/* 跨幣別結清：餘額只動債的幣別，實付金額純粹是紀錄 */}
+                              {transfer.paidCurrency && transfer.paidAmountMinor !== null ? (
+                                <Caption>
+                                  {`實付 ${formatWithCurrency(transfer.paidAmountMinor, transfer.paidCurrency)}`}
+                                </Caption>
+                              ) : mine ? (
+                                <Caption>{mine}</Caption>
+                              ) : null}
+                            </View>
+                          </Row>
+
+                          {confirmTransfer === transfer.id ? (
+                            <View style={{ marginTop: spacing.md }}>
+                              <Divider />
+                              <View style={{ marginTop: spacing.md }}>
+                                <Caption>
+                                  刪掉這筆還款？兩個人的結餘會回到還款之前的狀態。
+                                </Caption>
+                              </View>
+                              <View style={{ marginTop: spacing.sm }}>
+                                <Row>
+                                  <View style={{ flex: 1 }}>
+                                    <Button
+                                      label="取消"
+                                      variant="secondary"
+                                      onPress={() => setConfirmTransfer(null)}
+                                    />
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Button
+                                      label="刪除"
+                                      onPress={() => {
+                                        setConfirmTransfer(null);
+                                        void repository.deleteTransfer(transfer.id, groupId);
+                                      }}
+                                    />
+                                  </View>
+                                </Row>
+                              </View>
+                            </View>
+                          ) : null}
+                        </Card>
+                        </Pressable>
+                      </View>
+                    );
+                  }
+
+                  const { expense } = entry;
                   const myShare = view.me
                     ? (expense.splits.find((s) => s.memberId === view.me!.id)?.amountMinor ?? 0)
                     : 0;

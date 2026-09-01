@@ -62,6 +62,10 @@ const adapter: Repository = {
     return local.saveTransfer(input);
   },
 
+  async deleteTransfer(transferId, groupId) {
+    local.deleteTransfer(transferId, groupId);
+  },
+
   async attachReceipt(input) {
     local.attachReceipt(input);
   },
