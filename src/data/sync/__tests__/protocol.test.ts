@@ -236,6 +236,75 @@ maybe('同步協定（對真實 Supabase）', () => {
     expect(row!.deleted_at).not.toBeNull();
   });
 
+  it('軟刪除必須用 update 而不是殘缺的 upsert', async () => {
+    // 這是實機上抓到的真 bug：刪除支出在離線佇列裡排成
+    // upsert({id, group_id, deleted_at})，送出去一定失敗，
+    // 而且因為推送是「一筆失敗就停」，會把後面所有操作一起堵死。
+    //
+    // 原因：upsert 是 INSERT ... ON CONFLICT DO UPDATE，
+    // Postgres 會先檢查 INSERT 那半段的 NOT NULL 條件，
+    // 即使該列早就存在也一樣被擋下。
+    const expenseId = uuid();
+    await phone.from('expenses').upsert({
+      id: expenseId,
+      group_id: groupId,
+      title: '要刪的',
+      currency: 'TWD',
+      amount_minor: 100,
+      split_type: 'equal',
+      created_by: userId,
+      deleted_at: null,
+    });
+
+    const partial = await phone
+      .from('expenses')
+      .upsert({ id: expenseId, group_id: groupId, deleted_at: new Date().toISOString() });
+    expect(partial.error).not.toBeNull();
+    expect(partial.error!.message).toMatch(/not-null|null value/i);
+
+    const proper = await phone
+      .from('expenses')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', expenseId);
+    expect(proper.error).toBeNull();
+
+    const { data } = await phone.from('expenses').select('deleted_at').eq('id', expenseId).single();
+    expect(data!.deleted_at).not.toBeNull();
+  });
+
+  it('收據的軟刪除同樣不能用殘缺的 upsert', async () => {
+    const expenseId = uuid();
+    const receiptId = uuid();
+    await phone.from('expenses').upsert({
+      id: expenseId,
+      group_id: groupId,
+      title: '有收據的',
+      currency: 'TWD',
+      amount_minor: 50,
+      split_type: 'equal',
+      created_by: userId,
+      deleted_at: null,
+    });
+    await phone.from('receipts').upsert({
+      id: receiptId,
+      expense_id: expenseId,
+      group_id: groupId,
+      storage_path: `${groupId}/${receiptId}.jpg`,
+      deleted_at: null,
+    });
+
+    const partial = await phone
+      .from('receipts')
+      .upsert({ id: receiptId, group_id: groupId, deleted_at: new Date().toISOString() });
+    expect(partial.error).not.toBeNull();
+
+    const proper = await phone
+      .from('receipts')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', receiptId);
+    expect(proper.error).toBeNull();
+  });
+
   it('兩台裝置改同一列時，後寫的贏', async () => {
     const expenseId = uuid();
     await phone.from('expenses').upsert({

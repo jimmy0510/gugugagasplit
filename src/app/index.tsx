@@ -120,6 +120,7 @@ export default function GroupListScreen() {
 
 function NamePrompt({ onDone, error }: { onDone: (name: string) => void; error?: string | null }) {
   const [value, setValue] = useState('');
+  const [hint, setHint] = useState<string | null>(null);
 
   return (
     <Screen>
@@ -136,12 +137,18 @@ function NamePrompt({ onDone, error }: { onDone: (name: string) => void; error?:
           autoFocus
           maxLength={20}
         />
+        {hint ? <Caption tone="negative">{hint}</Caption> : null}
         <Button
           label="開始使用"
-          disabled={value.trim().length === 0}
+          // 刻意不用 disabled：停用的按鈕按下去毫無反應，
+          // 使用者只會覺得「按鈕壞了」而不知道是少填了名字。
+          // 改成讓他按，然後明確說出缺什麼。
           onPress={() => {
             const trimmed = value.trim();
-            if (!trimmed) return;
+            if (!trimmed) {
+              setHint('請先輸入名字。');
+              return;
+            }
             // 先讓畫面前進，名字在背景寫入。名字只是本地快取，
             // 不該讓一個儲存操作擋住整個 App 的入口。
             onDone(trimmed);

@@ -2,6 +2,7 @@ import { migrate } from './db';
 import * as local from './repo.local';
 import type { Repository } from './repository-types';
 import { start as startSync } from './sync/engine';
+import { repairLegacyDeletes } from './sync/outbox';
 
 /**
  * 把 repo.local 的同步函式包成 Repository 介面（非同步）。
@@ -12,6 +13,9 @@ import { start as startSync } from './sync/engine';
 const adapter: Repository = {
   async init() {
     migrate();
+    // 舊版把軟刪除排成殘缺的 upsert，那種操作會永遠失敗並堵住整個佇列。
+    // 必須在啟動同步「之前」改寫掉，否則第一輪推送又會卡在同一筆。
+    repairLegacyDeletes();
     startSync();
   },
 

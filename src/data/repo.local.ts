@@ -448,9 +448,9 @@ export function deleteExpense(expenseId: string, groupId: string): void {
       .where(eq(expenses.id, expenseId))
       .run();
     enqueue({
-      op: 'upsert',
+      op: 'update',
       target: 'expenses',
-      payload: { id: expenseId, group_id: groupId, deleted_at: ts },
+      payload: { id: expenseId, values: { deleted_at: ts } },
     });
   });
   bump();
@@ -578,9 +578,9 @@ export function removeReceipt(receiptId: string, groupId: string): void {
       .where(eq(receipts.id, receiptId))
       .run();
     enqueue({
-      op: 'upsert',
+      op: 'update',
       target: 'receipts',
-      payload: { id: receiptId, group_id: groupId, deleted_at: ts },
+      payload: { id: receiptId, values: { deleted_at: ts } },
     });
   });
   bump();

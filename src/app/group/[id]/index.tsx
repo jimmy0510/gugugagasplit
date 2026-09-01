@@ -22,7 +22,7 @@ import {
   Title,
 } from '@/ui/components';
 import { Avatar, AvatarUrlProvider } from '@/ui/Avatar';
-import { dayKey, formatAmounts, formatDate } from '@/ui/format';
+import { dayKey, expenseTitle, formatAmounts, formatDate } from '@/ui/format';
 import { spacing, useTheme } from '@/ui/theme';
 
 export default function GroupScreen() {
@@ -128,7 +128,7 @@ export default function GroupScreen() {
                         <Avatar name={firstPayer.name} avatarPath={firstPayer.avatarPath} size={34} />
                       ) : null}
                       <View style={{ flex: 1 }}>
-                        <Heading>{expense.title}</Heading>
+                        <Heading>{expenseTitle(expense.title)}</Heading>
                         <Caption>{`${payerNames} 付`}</Caption>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 2 }}>

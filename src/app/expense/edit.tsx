@@ -110,7 +110,7 @@ function ExpenseForm({
     await repository.saveExpense({
       id: expenseIdRef,
       groupId: snapshot.group.id,
-      title: title.trim() || '未命名支出',
+      title: title.trim(),
       currency,
       amountMinor: Number.isFinite(amountMinor) ? amountMinor : 0,
       splitType,
@@ -211,7 +211,13 @@ function ExpenseForm({
       <Stack.Screen options={{ title: existing ? '編輯支出' : '新增支出' }} />
 
       <Card>
-        <Field label="項目" value={title} onChangeText={setTitle} placeholder="例如：晚餐" maxLength={60} />
+        <Field
+          label="項目（選填）"
+          value={title}
+          onChangeText={setTitle}
+          placeholder="例如：晚餐"
+          maxLength={60}
+        />
         <Field
           label="金額"
           value={amountText}
@@ -333,7 +339,7 @@ function ExpenseForm({
       <Button
         label={existing ? '儲存變更' : '新增支出'}
         busy={busy}
-        disabled={!!preview.error || title.trim().length === 0 || !payerId}
+        disabled={!!preview.error || !payerId}
         onPress={async () => {
           setBusy(true);
           setSaveError(null);

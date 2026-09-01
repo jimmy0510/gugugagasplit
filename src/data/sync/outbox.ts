@@ -18,9 +18,14 @@ import { supabase } from '../supabase';
  */
 
 export interface EnqueueInput {
-  /** upload 是收據照片，路徑固定所以重放安全 */
-  op: 'upsert' | 'rpc' | 'upload';
-  /** upsert 的表名、rpc 的函式名，或 upload 的 bucket */
+  /**
+   * upsert  整列覆蓋（新增或編輯）
+   * update  只改指定欄位（軟刪除用）
+   * rpc     呼叫函式
+   * upload  收據照片，路徑固定所以重放安全
+   */
+  op: 'upsert' | 'update' | 'rpc' | 'upload';
+  /** upsert/update 的表名、rpc 的函式名，或 upload 的 bucket */
   target: string;
   payload: Record<string, unknown>;
 }
@@ -96,6 +101,14 @@ async function runOp(
   if (op === 'upsert') {
     return (await supabase.from(target).upsert(payload)).error;
   }
+  if (op === 'update') {
+    // 軟刪除只帶 deleted_at，不能用 upsert：upsert 是
+    // INSERT ... ON CONFLICT DO UPDATE，Postgres 會先檢查 INSERT 那半段的
+    // NOT NULL 條件，即使該列早就存在也一樣會被擋下
+    // （expenses 的 title/currency/amount_minor 等都是 NOT NULL）。
+    const { id, values } = payload as { id: string; values: Record<string, unknown> };
+    return (await supabase.from(target).update(values).eq('id', id)).error;
+  }
   if (op === 'rpc') {
     return (await supabase.rpc(target, payload)).error;
   }
@@ -109,6 +122,48 @@ async function runOp(
   } catch (err) {
     return { message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * 修復舊版排進佇列、格式錯誤的刪除操作。
+ *
+ * v1.1.1 以前的軟刪除用 upsert 送出殘缺的列（只有 id/group_id/deleted_at），
+ * 伺服器一定回 NOT NULL 錯誤。因為推送是「一筆失敗就停」，
+ * 那筆會永遠卡在佇列最前面，把後面所有操作一起堵死。
+ *
+ * 光是更新 App 不會讓它自己好——佇列裡存的還是舊格式。
+ * 所以開機時把它們改寫成新的 update 形式，使用者原本的刪除意圖也保住了，
+ * 不是直接丟掉。
+ */
+export function repairLegacyDeletes(): number {
+  const rows = db.select().from(outbox).all();
+  let repaired = 0;
+
+  for (const row of rows) {
+    if (row.op !== 'upsert') continue;
+    if (row.target !== 'expenses' && row.target !== 'receipts') continue;
+
+    const payload = JSON.parse(row.payload) as Record<string, unknown>;
+    if (!payload.deleted_at || !payload.id) continue;
+
+    // 只挑「殘缺列」——完整的列（例如子表的軟刪除）本來就送得出去
+    const partial =
+      row.target === 'expenses' ? payload.title === undefined : payload.storage_path === undefined;
+    if (!partial) continue;
+
+    db.update(outbox)
+      .set({
+        op: 'update',
+        payload: JSON.stringify({ id: payload.id, values: { deleted_at: payload.deleted_at } }),
+        attempts: 0,
+        lastError: null,
+      })
+      .where(eq(outbox.seq, row.seq))
+      .run();
+    repaired += 1;
+  }
+
+  return repaired;
 }
 
 export function countOutbox(): number {

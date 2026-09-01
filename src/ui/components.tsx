@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { Children, isValidElement, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -21,6 +21,27 @@ import { hairline, maxContentWidth, radius, spacing, tabularNums, useTheme, type
  * 顏色只在需要時出現，其餘靠字重與間距建立層次。
  */
 
+/**
+ * 用外距而不是 gap 來排版。
+ *
+ * 為什麼不用 gap：Android 上出現過「按鈕看得到但只有中間一小塊點得到」，
+ * 網頁版同一份程式碼卻正常。Android 的觸控會被父容器邊界裁切，
+ * 一旦畫面佈局與原生 view 的實際框不一致就會這樣。gap 在新架構下
+ * 是相對新的實作，是最可能的來源，所以在版面容器上避開它。
+ */
+function spaced(children: ReactNode, gapSize: number): ReactNode {
+  const items = Children.toArray(children).filter(Boolean);
+  return items.map((child, index) =>
+    isValidElement(child) && index > 0 ? (
+      <View key={child.key ?? index} style={{ marginTop: gapSize }}>
+        {child}
+      </View>
+    ) : (
+      child
+    ),
+  );
+}
+
 export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
   const t = useTheme();
   const inner = (
@@ -31,9 +52,8 @@ export function Screen({ children, scroll = true }: { children: ReactNode; scrol
         alignSelf: 'center',
         paddingHorizontal: spacing.lg,
         paddingTop: spacing.lg,
-        gap: spacing.lg,
       }}>
-      {children}
+      {spaced(children, spacing.lg)}
     </View>
   );
   return (
@@ -115,11 +135,10 @@ export function Card({ children, style }: { children: ReactNode; style?: ViewSty
           borderRadius: radius.lg,
           paddingHorizontal: spacing.lg,
           paddingVertical: spacing.lg,
-          gap: spacing.md,
         },
         style,
       ]}>
-      {children}
+      {spaced(children, spacing.md)}
     </View>
   );
 }
@@ -161,21 +180,35 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={off}
+      // 觸控範圍再往外擴 8dp。整個按鈕框本來就該可點，
+      // 但實機上回報過「只有文字附近有反應」，多給一圈餘裕，
+      // 就算量測到的觸控框與畫出來的框有些微偏移也不會點不到。
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      // Android 的水波紋順便給出「這裡按得到」的視覺回饋，
+      // 使用者才看得出可點範圍有多大。
+      android_ripple={{ color: 'rgba(127,127,127,0.25)' }}
       style={({ pressed }) => ({
         backgroundColor: bg,
         borderRadius: radius.md,
-        opacity: pressed && !off ? 0.65 : 1,
+        // 停用時同時降低不透明度：只換成灰底灰字，看起來仍像個
+        // 可以按的次要按鈕，使用者會以為按鈕壞了。
+        opacity: off ? 0.45 : pressed ? 0.65 : 1,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.lg,
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: 46,
+        minHeight: 48,
+        width: '100%',
+        overflow: 'hidden',
       })}>
-      {busy ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <Text style={{ color: fg, fontWeight: '600', fontSize: 15, letterSpacing: -0.2 }}>{label}</Text>
-      )}
+      {/* 內容一律不吃觸控事件，確保命中的一定是 Pressable 本身 */}
+      <View pointerEvents="none" style={{ width: '100%', alignItems: 'center' }}>
+        {busy ? (
+          <ActivityIndicator color={fg} />
+        ) : (
+          <Text style={{ color: fg, fontWeight: '600', fontSize: 15, letterSpacing: -0.2 }}>{label}</Text>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -185,8 +218,8 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={{ gap: spacing.sm }}>
-      {label ? <Label>{label}</Label> : null}
+    <View>
+      {label ? <View style={{ marginBottom: spacing.sm }}><Label>{label}</Label></View> : null}
       <TextInput
         placeholderTextColor={t.textDim}
         {...props}
@@ -214,7 +247,7 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
           props.style as object,
         ]}
       />
-      {hint ? <Caption>{hint}</Caption> : null}
+      {hint ? <View style={{ marginTop: spacing.sm }}><Caption>{hint}</Caption></View> : null}
     </View>
   );
 }
