@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { hairline, maxContentWidth, radius, spacing, tabularNums, useTheme, type Palette } from './theme';
 
@@ -70,11 +71,21 @@ export function Screen({
   header,
   /** 浮在內容之上、不隨捲動移動的東西（例如 Toast） */
   overlay,
+  /**
+   * 自己負責避開狀態列。
+   *
+   * 預設「不要」。有原生標題列的畫面，標題列已經把狀態列的高度讓開了，
+   * 這裡再讓一次就會在標題與內容之間多出一整條空白——安全區讀的是整個視窗的
+   * 內縮值，它不知道上面已經有人讓過。只有自己畫表頭、沒有原生標題列的畫面
+   * （首頁、還沒進導覽器的啟動畫面）才需要打開。
+   */
+  safeTop = false,
 }: {
   children: ReactNode;
   scroll?: boolean;
   header?: ReactNode;
   overlay?: ReactNode;
+  safeTop?: boolean;
 }) {
   const t = useTheme();
   const inner = (
@@ -90,7 +101,9 @@ export function Screen({
     </View>
   );
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: t.bg }}
+      edges={header || safeTop ? ['top', 'bottom'] : ['bottom']}>
       {header ? (
         // 分隔線要橫貫整個畫面，內容才置中收在 maxContentWidth 裡
         <View style={{ borderBottomWidth: hairline, borderBottomColor: t.line }}>
@@ -489,9 +502,16 @@ export function Toast({ message }: { message: string | null }) {
 /**
  * 標題列的刷新鍵：圖示加文字，整塊都可以按。
  *
- * 轉圈不是裝飾。手動刷新多半什麼都沒變，沒有這個動畫就完全看不出
- * 到底有沒有在做事——所以它必須轉到 onPress 的 Promise 真的結束為止。
+ * 轉圈不是裝飾。手動刷新多半什麼都沒變，沒有這個動畫就完全看不出到底有沒有在做事。
+ *
+ * 圖示用圖示字型而不是一般的文字符號：一般字的旋轉軸是排版方框的中心，而字的
+ * 墨跡並不在方框正中央（左右有側距、又坐在基線上），轉起來會偏心晃動；
+ * 圖示字型的字面本來就對齊方框中心，轉起來才是穩的。
  */
+/** 轉圈至少要看得見的時間。網頁版的刷新是瞬間完成的，不留一下什麼都看不到。 */
+const MIN_SPIN_MS = 600;
+const ICON = 24;
+
 export function RefreshButton({ label, onPress }: { label: string; onPress: () => Promise<void> }) {
   const t = useTheme();
   const [busy, setBusy] = useState(false);
@@ -512,8 +532,14 @@ export function RefreshButton({ label, onPress }: { label: string; onPress: () =
       onPress={async () => {
         if (busy) return;
         setBusy(true);
+        const startedAt = Date.now();
         try {
           await onPress();
+          // 網頁版只是重新查詢，幾毫秒就結束；轉一幀就停等於沒轉過
+          const elapsed = Date.now() - startedAt;
+          if (elapsed < MIN_SPIN_MS) {
+            await new Promise((resolve) => setTimeout(resolve, MIN_SPIN_MS - elapsed));
+          }
         } finally {
           setBusy(false);
         }
@@ -526,18 +552,19 @@ export function RefreshButton({ label, onPress }: { label: string; onPress: () =
         paddingHorizontal: 4,
         opacity: pressed ? 0.5 : 1,
       })}>
-      <Animated.Text
+      <Animated.View
         style={{
-          color: t.signal,
-          fontSize: 24,
-          lineHeight: 28,
-          fontWeight: '700',
+          width: ICON,
+          height: ICON,
+          alignItems: 'center',
+          justifyContent: 'center',
           transform: [
             { rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) },
           ],
         }}>
-        ↻
-      </Animated.Text>
+        {/* sync 就是兩個箭頭圍成一圈的那個 */}
+        <MaterialIcons name="sync" size={ICON} color={t.signal} />
+      </Animated.View>
       <Text style={{ color: t.signal, fontSize: 16, fontWeight: '600', letterSpacing: -0.2 }}>
         {label}
       </Text>

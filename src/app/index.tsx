@@ -133,7 +133,7 @@ export default function HomeScreen() {
     void setGroupOrder(groupIds);
   };
 
-  if (name === undefined) return <Screen><Loading /></Screen>;
+  if (name === undefined) return <Screen safeTop><Loading /></Screen>;
   if (name === '') return <NamePrompt onDone={setName} error={error} />;
 
   const hasGroups = Boolean(groups && groups.length > 0);
@@ -208,7 +208,7 @@ function NamePrompt({ onDone, error }: { onDone: (name: string) => void; error?:
   const [hint, setHint] = useState<string | null>(null);
 
   return (
-    <Screen>
+    <Screen safeTop>
       <Title>你叫什麼名字？</Title>
       <Body dim>這是朋友在群組裡看到的名字，之後可以改。</Body>
       {/* 讀取群組時的錯誤在這個階段本來看不到，會讓問題變成「按鈕沒反應」 */}
