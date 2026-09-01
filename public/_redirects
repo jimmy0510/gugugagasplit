@@ -1,0 +1,3 @@
+# 所有路徑都交給 index.html，由 expo-router 在用戶端處理
+# 沒有這條，直接開 /group/<id> 會 404
+/*  /index.html  200
