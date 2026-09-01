@@ -14,11 +14,9 @@ import { useGroupRealtime } from '@/data/realtime';
 import { useGroup } from '@/data/repository';
 import {
   Banner,
-  Body,
   Button,
   Caption,
   Card,
-  Divider,
   Empty,
   Heading,
   Label,
@@ -69,36 +67,6 @@ export default function BalancesScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: `${snapshot.group.name} · 結算` }} />
-
-      <Title>每個人的結餘</Title>
-      <Card>
-        {snapshot.members.map((member, index) => {
-          const row = view.balances[member.id];
-          const currencies = currenciesOf(row);
-          return (
-            <View key={member.id} style={{ gap: spacing.xs }}>
-              {index > 0 ? <Divider /> : null}
-              <Row>
-                <Body>{member.name}</Body>
-                <View style={{ alignItems: 'flex-end' }}>
-                  {currencies.length === 0 ? (
-                    <Caption>已結清</Caption>
-                  ) : (
-                    currencies.map((currency) => (
-                      <Mono key={currency} tone={row[currency] > 0 ? 'positive' : 'negative'}>
-                        {`${row[currency] > 0 ? '+' : '−'}${formatWithCurrency(
-                          Math.abs(row[currency]),
-                          currency,
-                        )}`}
-                      </Mono>
-                    ))
-                  )}
-                </View>
-              </Row>
-            </View>
-          );
-        })}
-      </Card>
 
       <Title>怎麼還</Title>
       <Segmented

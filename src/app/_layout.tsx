@@ -23,7 +23,8 @@ import { useTheme } from '@/ui/theme';
  * 從 Email 驗證連結點進來、或 iOS 上把網頁加到主畫面後開啟，
  * 都是「全新的一頁」——沒有上一頁，所以 expo-router 不會畫返回箭頭，
  * 而獨立視窗模式也沒有瀏覽器的返回鍵，使用者會直接被困在那個畫面。
- * 這個按鈕不依賴歷史，一律導回群組列表。
+ * 這個按鈕不依賴歷史，一律導回群組列表。畫成跟系統返回鍵一樣的左箭頭——
+ * 對使用者來說它就是「離開這一頁」，沒必要因為實作上是導向首頁就長得不一樣。
  */
 function HomeButton() {
   const t = useTheme();
@@ -33,7 +34,7 @@ function HomeButton() {
       onPress={() => router.replace('/')}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       style={{ paddingHorizontal: 4 }}>
-      <Text style={{ color: t.signal, fontSize: 16, fontWeight: '600' }}>群組</Text>
+      <Text style={{ color: t.text, fontSize: 24, lineHeight: 26 }}>←</Text>
     </Pressable>
   );
 }
@@ -105,7 +106,8 @@ export default function RootLayout() {
           headerLeft:
             route.name === 'index' || navigation.canGoBack() ? undefined : () => <HomeButton />,
         })}>
-        <Stack.Screen name="index" options={{ title: 'gugugagasplit' }} />
+        {/* 首頁自己畫表頭（群組切換列），不要再疊一條原生標題列 */}
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="account" options={{ title: '帳號' }} />
         <Stack.Screen name="join/[code]" options={{ title: '加入群組' }} />
         <Stack.Screen name="group/[id]/index" options={{ title: '群組' }} />
