@@ -10,6 +10,7 @@ import {
   simplifyDebts,
   type Settlement,
 } from '@/domain';
+import { useGroupRealtime } from '@/data/realtime';
 import { useGroup } from '@/data/repository';
 import {
   Banner,
@@ -37,6 +38,9 @@ export default function BalancesScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: snapshot, loading } = useGroup(id);
+
+  // 其他成員改了東西，畫面自己更新，不用手動重整
+  useGroupRealtime(id);
   const [mode, setMode] = useState<Mode>('simplified');
 
   const view = useMemo(() => {

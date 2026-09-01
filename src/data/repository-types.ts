@@ -11,6 +11,14 @@ export interface Repository {
   /** App 啟動時呼叫：原生端跑 migration 並啟動同步引擎 */
   init(): Promise<void>;
 
+  /**
+   * 伺服器端資料變了，把畫面上的資料弄成最新的。
+   *
+   * 兩個平台的作法不同：Web 直接重新查詢；Android 要先讓同步引擎
+   * 把變更拉進本地 SQLite，畫面才看得到。所以由各自的實作決定。
+   */
+  refresh(): Promise<void>;
+
   listGroups(): Promise<Group[]>;
   loadGroup(groupId: string): Promise<GroupSnapshot | null>;
 

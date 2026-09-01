@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { computeNetBalances, currenciesOf, formatWithCurrency } from '@/domain';
+import { useGroupRealtime } from '@/data/realtime';
 import { useGroup } from '@/data/repository';
 import { getUserId } from '@/data/supabase';
 import {
@@ -30,6 +31,9 @@ export default function GroupScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: snapshot, error, loading } = useGroup(id);
+
+  // 其他成員改了東西，畫面自己更新，不用手動重整
+  useGroupRealtime(id);
 
   const view = useMemo(() => {
     if (!snapshot) return null;

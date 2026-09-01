@@ -1,7 +1,7 @@
 import { migrate } from './db';
 import * as local from './repo.local';
 import type { Repository } from './repository-types';
-import { start as startSync } from './sync/engine';
+import { kick, start as startSync } from './sync/engine';
 import { repairLegacyDeletes } from './sync/outbox';
 
 /**
@@ -17,6 +17,11 @@ const adapter: Repository = {
     // 必須在啟動同步「之前」改寫掉，否則第一輪推送又會卡在同一筆。
     repairLegacyDeletes();
     startSync();
+  },
+
+  // 原生端讀的是本地 SQLite，所以要先讓同步引擎把變更拉進來
+  async refresh() {
+    kick();
   },
 
   async listGroups() {

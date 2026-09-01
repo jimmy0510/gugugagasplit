@@ -1,3 +1,4 @@
+import { bump } from './changes';
 import * as remote from './repo.remote';
 import type { Repository } from './repository-types';
 
@@ -12,6 +13,8 @@ import type { Repository } from './repository-types';
  */
 const impl: Repository = {
   init: async () => {},
+  // Web 直接讀伺服器，讓畫面重新查詢就是最新的
+  refresh: async () => bump(),
   listGroups: remote.listGroups,
   loadGroup: remote.loadGroup,
   createGroup: remote.createGroup,

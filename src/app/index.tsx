@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 
 import { COMMON_CURRENCIES } from '@/domain';
 import { getDisplayName, setDisplayName } from '@/data/profile';
+import { useGroupListRealtime } from '@/data/realtime';
 import { getIdentity } from '@/data/supabase';
 import { repository, useGroups } from '@/data/repository';
 import { ensureSignedIn } from '@/data/supabase';
@@ -35,10 +36,17 @@ export default function GroupListScreen() {
   const [name, setName] = useState<string | undefined>(undefined);
   const [mode, setMode] = useState<Mode>('list');
   const [emailBound, setEmailBound] = useState<boolean | null>(null);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+
+  // 被加進新群組時，列表自己會更新
+  useGroupListRealtime(userId);
 
   useEffect(() => {
     void getDisplayName().then((stored) => setName(stored ?? ''));
-    void getIdentity().then((identity) => setEmailBound(Boolean(identity?.email)));
+    void getIdentity().then((identity) => {
+      setEmailBound(Boolean(identity?.email));
+      setUserId(identity?.userId);
+    });
   }, []);
 
   if (name === undefined) return <Screen><Loading /></Screen>;

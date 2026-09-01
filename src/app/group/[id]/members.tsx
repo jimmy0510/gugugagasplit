@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Platform, Share, View } from 'react-native';
 
 import { inviteLinkFor } from '@/data/invites';
+import { useGroupRealtime } from '@/data/realtime';
 import { repository, useGroup } from '@/data/repository';
 import { getUserId } from '@/data/supabase';
 import {
@@ -27,6 +28,9 @@ import { spacing } from '@/ui/theme';
 export default function MembersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: snapshot, loading, reload } = useGroup(id);
+
+  // 其他成員改了東西，畫面自己更新，不用手動重整
+  useGroupRealtime(id);
 
   const [newName, setNewName] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
