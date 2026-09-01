@@ -21,13 +21,3 @@ export function dayKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
-
-/**
- * 支出的顯示名稱。項目是選填的，沒填就顯示佔位文字。
- *
- * 空字串是刻意存進資料庫的——若在儲存時塞一個「未命名支出」，
- * 使用者下次編輯會看到那四個字卡在欄位裡，還得自己刪掉。
- */
-export function expenseTitle(title: string): string {
-  return title.trim() || '（未命名）';
-}

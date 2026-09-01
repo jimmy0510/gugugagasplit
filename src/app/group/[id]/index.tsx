@@ -22,7 +22,7 @@ import {
   Title,
 } from '@/ui/components';
 import { Avatar, AvatarUrlProvider } from '@/ui/Avatar';
-import { dayKey, expenseTitle, formatAmounts, formatDate } from '@/ui/format';
+import { dayKey, formatAmounts, formatDate } from '@/ui/format';
 import { spacing, useTheme } from '@/ui/theme';
 
 export default function GroupScreen() {
@@ -128,7 +128,9 @@ export default function GroupScreen() {
                         <Avatar name={firstPayer.name} avatarPath={firstPayer.avatarPath} size={34} />
                       ) : null}
                       <View style={{ flex: 1 }}>
-                        <Heading>{expenseTitle(expense.title)}</Heading>
+                        {/* 項目是選填的。沒填就整個不渲染，
+                            而不是留一個空的標題列撐出多餘的高度。 */}
+                        {expense.title.trim() ? <Heading>{expense.title}</Heading> : null}
                         <Caption>{`${payerNames} 付`}</Caption>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 2 }}>
