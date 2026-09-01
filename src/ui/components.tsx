@@ -1,6 +1,7 @@
-import { Children, Fragment, isValidElement, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Platform,
   Pressable,
   ScrollView,
@@ -67,10 +68,13 @@ export function Screen({
   scroll = true,
   /** 釘在最上面、不隨內容捲動的一列（首頁用來放群組切換列） */
   header,
+  /** 浮在內容之上、不隨捲動移動的東西（例如 Toast） */
+  overlay,
 }: {
   children: ReactNode;
   scroll?: boolean;
   header?: ReactNode;
+  overlay?: ReactNode;
 }) {
   const t = useTheme();
   const inner = (
@@ -112,6 +116,7 @@ export function Screen({
       ) : (
         inner
       )}
+      {overlay}
     </SafeAreaView>
   );
 }
@@ -431,3 +436,111 @@ export function Empty({ title, hint }: { title: string; hint?: string }) {
 }
 
 export type { Palette };
+
+/**
+ * 短暫浮出的提示，仿 Android 的 toast：畫面下方一塊淺色圓角，說完就淡出。
+ *
+ * 用在「做完了，但沒有畫面變化可以佐證」的動作上——例如手動刷新，
+ * 沒有這一下的話使用者不知道到底有沒有發生事情。
+ */
+export function Toast({ message }: { message: string | null }) {
+  const t = useTheme();
+  // Animated.Value 建立一次就不再變，用 useState 的惰性初始化而不是 ref：
+  // render 期間讀 ref 是 React 明文不建議的，lint 也會擋。
+  const [opacity] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!message) return;
+    opacity.setValue(0);
+    Animated.sequence([
+      Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.delay(1300),
+      Animated.timing(opacity, { toValue: 0, duration: 350, useNativeDriver: true }),
+    ]).start();
+  }, [message, opacity]);
+
+  if (!message) return null;
+
+  return (
+    <Animated.View
+      // 不吃觸控，否則它蓋住的按鈕在這一秒多內都按不到
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: spacing.xxl,
+        alignItems: 'center',
+        opacity,
+      }}>
+      <View
+        style={{
+          backgroundColor: t.lineStrong,
+          borderRadius: radius.pill,
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.sm,
+        }}>
+        <Text style={{ color: t.text, fontSize: 14, fontWeight: '600' }}>{message}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
+ * 標題列的刷新鍵：圖示加文字，整塊都可以按。
+ *
+ * 轉圈不是裝飾。手動刷新多半什麼都沒變，沒有這個動畫就完全看不出
+ * 到底有沒有在做事——所以它必須轉到 onPress 的 Promise 真的結束為止。
+ */
+export function RefreshButton({ label, onPress }: { label: string; onPress: () => Promise<void> }) {
+  const t = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [spin] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!busy) return;
+    spin.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 800, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [busy, spin]);
+
+  return (
+    <Pressable
+      onPress={async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+          await onPress();
+        } finally {
+          setBusy(false);
+        }
+      }}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingHorizontal: 4,
+        opacity: pressed ? 0.5 : 1,
+      })}>
+      <Animated.Text
+        style={{
+          color: t.signal,
+          fontSize: 24,
+          lineHeight: 28,
+          fontWeight: '700',
+          transform: [
+            { rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) },
+          ],
+        }}>
+        ↻
+      </Animated.Text>
+      <Text style={{ color: t.signal, fontSize: 16, fontWeight: '600', letterSpacing: -0.2 }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}

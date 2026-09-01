@@ -1,6 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import {
   confirmEmailBinding,
@@ -12,6 +12,7 @@ import {
 } from '@/data/supabase';
 import { avatarPathFor, avatarUrls, pickAndUploadAvatar } from '@/data/avatars';
 import { bump } from '@/data/changes';
+import { repository } from '@/data/repository';
 import { getDisplayName, setDisplayName } from '@/data/profile';
 import {
   Banner,
@@ -27,15 +28,16 @@ import {
   Row,
   Screen,
   Title,
+  RefreshButton,
+  Toast,
 } from '@/ui/components';
 import { Avatar } from '@/ui/Avatar';
-import { spacing, useTheme } from '@/ui/theme';
+import { spacing } from '@/ui/theme';
 
 type Stage = 'idle' | 'bindCode' | 'recoverCode';
 
 export default function AccountScreen() {
   const router = useRouter();
-  const t = useTheme();
   const [identity, setIdentity] = useState<Identity | null | undefined>(undefined);
   const [name, setName] = useState('');
 
@@ -45,6 +47,7 @@ export default function AccountScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,19 +81,22 @@ export default function AccountScreen() {
   const bound = Boolean(identity?.email);
 
   return (
-    <Screen>
-      {/* 這個畫面常常是從 Email 驗證連結直接進來的，那種情況沒有上一頁。
-          右上角固定放一個「完成」，不依賴瀏覽歷史也離得開。 */}
+    <Screen overlay={<Toast message={toast} />}>
+      {/* 右上角原本是「完成」，但它做的事只是回首頁，而左上角本來就有返回鍵
+          （沒有瀏覽歷史時 _layout 會補一顆），等於兩顆按鈕做同一件事。
+          換成手動刷新比較有用：資料多半自己會更新，但總有想確認一下的時候。 */}
       <Stack.Screen
         options={{
           title: '帳號',
           headerRight: () => (
-            <Pressable
-              onPress={() => router.replace('/')}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              style={{ paddingHorizontal: 4 }}>
-              <Text style={{ color: t.signal, fontSize: 16, fontWeight: '600' }}>完成</Text>
-            </Pressable>
+            <RefreshButton
+              label="刷新狀態"
+              onPress={async () => {
+                await repository.refresh();
+                setToast('已刷新');
+                setTimeout(() => setToast(null), 1800);
+              }}
+            />
           ),
         }}
       />
