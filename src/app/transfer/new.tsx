@@ -21,6 +21,7 @@ import {
   Field,
   Heading,
   Label,
+  LinkButton,
   Loading,
   Row,
   Screen,
@@ -114,17 +115,16 @@ export default function NewTransferScreen() {
           onChangeText={setAmountText}
           keyboardType="decimal-pad"
           inputMode="decimal"
-          placeholder="0"
+          placeholder="0.00"
         />
         <Caption>這個數字決定餘額怎麼變動。</Caption>
       </Card>
 
       <Card>
         <Row>
-          <Heading>用其他幣別支付</Heading>
-          <Button
-            label={crossCurrency ? '取消' : '設定'}
-            variant="secondary"
+          <Heading>{crossCurrency ? '不同幣別結清' : '還款方式'}</Heading>
+          <LinkButton
+            label={crossCurrency ? '取消' : '不同幣別結清'}
             onPress={() => setCrossCurrency((v) => !v)}
           />
         </Row>
@@ -154,7 +154,7 @@ export default function NewTransferScreen() {
             ) : null}
           </View>
         ) : (
-          <Caption>{`預設就是用 ${currency} 付。跨幣別清算才需要設定。`}</Caption>
+          <Caption>{`預設就是用 ${currency} 付。要用別的幣別還這筆債時才需要設定。`}</Caption>
         )}
       </Card>
 

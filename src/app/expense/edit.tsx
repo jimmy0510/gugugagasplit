@@ -3,13 +3,14 @@ import { useMemo, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import {
+  allocate,
   COMMON_CURRENCIES,
   computeSplits,
-  exponentOf,
   formatMoney,
   formatWithCurrency,
   parseMoney,
   PERCENT_SCALE,
+  roundHalfAwayFromZero,
   type SplitInput,
   type SplitResult,
   type SplitType,
@@ -64,7 +65,6 @@ function ExpenseForm({
   expenseId?: string;
   onDone: () => void;
 }) {
-  const t = useTheme();
   const existing = expenseId ? snapshot.expenses.find((e) => e.id === expenseId) : undefined;
   const me = snapshot.members.find((m) => m.userId === getUserId());
 
@@ -93,6 +93,11 @@ function ExpenseForm({
     }
     return map;
   });
+  // 指定金額 + 服務費：KTV、餐廳那種「各自點的再外加一成」的帳。
+  // 只是輸入時的換算，不另外存進資料庫——存下去的就是加完之後的金額，
+  // 所以重新打開這筆時看到的是最終數字，勾選框回到未勾選。
+  const [serviceOn, setServiceOn] = useState(false);
+  const [serviceText, setServiceText] = useState('10');
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [receiptBusy, setReceiptBusy] = useState(false);
@@ -116,7 +121,7 @@ function ExpenseForm({
       splitType,
       paidAt: existing?.paidAt ?? new Date().toISOString(),
       payers: [{ memberId: payerId, amountMinor: Number.isFinite(amountMinor) ? amountMinor : 0 }],
-      splitInputs,
+      splitInputs: effectiveInputs,
       userId: getUserId(),
     });
   };
@@ -181,16 +186,47 @@ function ExpenseForm({
     });
   }, [participants, values, splitType, currency]);
 
+  const serviceRate = useMemo(() => {
+    const percent = Number(serviceText.trim());
+    return Number.isFinite(percent) && percent >= 0 ? percent / 100 : 0;
+  }, [serviceText]);
+
+  /**
+   * 指定金額若加了服務費，就把每個人填的金額按比例放大到含服務費的總額。
+   *
+   * 用 allocate 而不是逐筆乘 1.1：逐筆乘完各自四捨五入，加起來會跟總額差個一兩分，
+   * 然後畫面就會說「還差 0.02」，很煩。allocate 保證加總剛好等於放大後的總額。
+   */
+  const effectiveInputs = useMemo<SplitInput[]>(() => {
+    if (splitType !== 'exact' || !serviceOn) return splitInputs;
+
+    const entered = splitInputs.map((input) => input.value ?? 0);
+    if (entered.some((value) => !Number.isFinite(value) || value < 0)) return splitInputs;
+
+    const sum = entered.reduce((a, b) => a + b, 0);
+    if (sum <= 0) return splitInputs;
+
+    const withService = allocate(roundHalfAwayFromZero(sum * (1 + serviceRate)), entered);
+    return splitInputs.map((input, index) => ({ ...input, value: withService[index] }));
+  }, [splitInputs, splitType, serviceOn, serviceRate]);
+
+  /** 指定金額還差多少才湊到總額。正數 = 還不夠，負數 = 超出 */
+  const exactDiff = useMemo(() => {
+    if (splitType !== 'exact' || !Number.isFinite(amountMinor)) return null;
+    const sum = effectiveInputs.reduce((total, input) => total + (input.value ?? 0), 0);
+    return Number.isFinite(sum) ? amountMinor - sum : null;
+  }, [splitType, amountMinor, effectiveInputs]);
+
   /** 即時預覽：直接呼叫 domain 層，看到的就是實際會存下去的數字 */
   const preview = useMemo<{ splits?: SplitResult[]; error?: string }>(() => {
     if (!Number.isFinite(amountMinor) || amountMinor <= 0) return { error: '請輸入金額' };
     if (participants.length === 0) return { error: '至少要選一個分攤的人' };
     try {
-      return { splits: computeSplits(amountMinor, splitType, splitInputs) };
+      return { splits: computeSplits(amountMinor, splitType, effectiveInputs) };
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) };
     }
-  }, [amountMinor, splitType, splitInputs, participants.length]);
+  }, [amountMinor, splitType, effectiveInputs, participants.length]);
 
   const percentSum = useMemo(
     () => splitInputs.reduce((sum, i) => sum + (Number.isFinite(i.value) ? (i.value ?? 0) : 0), 0),
@@ -211,20 +247,21 @@ function ExpenseForm({
       <Stack.Screen options={{ title: existing ? '編輯支出' : '新增支出' }} />
 
       <Card>
+        {/* 金額擺第一個：記帳時金額是必填也是主角，項目是可以跳過的 */}
+        <Field
+          label="金額"
+          value={amountText}
+          onChangeText={setAmountText}
+          placeholder="0.00"
+          keyboardType="decimal-pad"
+          inputMode="decimal"
+        />
         <Field
           label="項目（選填）"
           value={title}
           onChangeText={setTitle}
           placeholder="例如：晚餐"
           maxLength={60}
-        />
-        <Field
-          label="金額"
-          value={amountText}
-          onChangeText={setAmountText}
-          placeholder={exponentOf(currency) > 0 ? '0.00' : '0'}
-          keyboardType="decimal-pad"
-          inputMode="decimal"
         />
         <Label>幣別</Label>
         <Segmented
@@ -252,6 +289,35 @@ function ExpenseForm({
         <Heading>怎麼分</Heading>
         <Segmented options={SPLIT_LABELS} value={splitType} onChange={setSplitType} />
 
+        {splitType === 'exact' ? (
+          <Row>
+            <Pressable
+              onPress={() => setServiceOn((on) => !on)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
+              <Check on={serviceOn} />
+              <Body>加收服務費</Body>
+            </Pressable>
+            {serviceOn ? (
+              <View style={{ width: 92 }}>
+                <Field
+                  label=""
+                  value={serviceText}
+                  onChangeText={setServiceText}
+                  placeholder="10"
+                  keyboardType="decimal-pad"
+                  inputMode="decimal"
+                  style={{ paddingVertical: spacing.sm, textAlign: 'right' }}
+                />
+              </View>
+            ) : null}
+            {serviceOn ? <Body dim>%</Body> : null}
+          </Row>
+        ) : null}
+
+        {serviceOn && splitType === 'exact' ? (
+          <Caption>各自填自己點的金額，這裡按比例加上服務費，湊到上面的總額。</Caption>
+        ) : null}
+
         <Divider />
 
         {snapshot.members.map((member) => {
@@ -264,21 +330,7 @@ function ExpenseForm({
                 <Pressable
                   onPress={() => toggleParticipant(member.id)}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
-                  <View
-                    style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: 11,
-                      borderWidth: included ? 0 : 1.5,
-                      borderColor: t.lineStrong,
-                      backgroundColor: included ? t.signal : 'transparent',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    {included ? (
-                      <Body style={{ color: t.signalText, fontSize: 12, fontWeight: '700' }}>✓</Body>
-                    ) : null}
-                  </View>
+                  <Check on={included} />
                   <Body>{member.name}</Body>
                 </Pressable>
 
@@ -312,7 +364,19 @@ function ExpenseForm({
           </Caption>
         ) : null}
 
-        {preview.error ? (
+        {splitType === 'exact' && exactDiff !== null ? (
+          <Row>
+            {/* 「總和 2000 與總額 10000 不符」要人自己心算差多少，直接講差額 */}
+            <Caption tone={exactDiff === 0 ? 'positive' : 'negative'}>
+              {exactDiff === 0
+                ? '指定金額剛好等於總額'
+                : exactDiff > 0
+                  ? `還差 ${formatWithCurrency(exactDiff, currency)}`
+                  : `超出 ${formatWithCurrency(-exactDiff, currency)}`}
+            </Caption>
+            <Caption>逗號是加總，20,20＝40</Caption>
+          </Row>
+        ) : preview.error ? (
           <Banner>{preview.error}</Banner>
         ) : (
           <Caption tone="positive">
@@ -377,5 +441,25 @@ function ExpenseForm({
       <Caption>{`付款人目前只支援一位。多人共同付款的資料結構已經備好，之後補上介面。`}</Caption>
       <Body dim>{nameOf(payerId)} 付了全額</Body>
     </Screen>
+  );
+}
+
+/** 圓形勾選框。參與者與服務費共用，兩邊的視覺才不會各長各的 */
+function Check({ on }: { on: boolean }) {
+  const t = useTheme();
+  return (
+    <View
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        borderWidth: on ? 0 : 1.5,
+        borderColor: t.lineStrong,
+        backgroundColor: on ? t.signal : 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      {on ? <Body style={{ color: t.signalText, fontSize: 12, fontWeight: '700' }}>✓</Body> : null}
+    </View>
   );
 }
