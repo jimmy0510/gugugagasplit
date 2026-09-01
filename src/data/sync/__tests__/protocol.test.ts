@@ -356,6 +356,75 @@ maybe('同步協定（對真實 Supabase）', () => {
     expect(error).not.toBeNull();
   });
 
+  it('邀請碼可以讓非成員查到群組名稱與人數，但僅止於此', async () => {
+    // peek_invite 是唯一開放給非成員的查詢，加入前的確認畫面要用。
+    // 它應該只回傳確認所需的最小資訊——名稱與人數，不能夾帶其他東西。
+    const code = `PK${uuid().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    await phone.from('group_invites').insert({
+      id: uuid(),
+      group_id: groupId,
+      code,
+      created_by: userId,
+    });
+
+    const stranger = await newDevice();
+    const { data, error } = await stranger.client.rpc('peek_invite', { invite_code: code });
+    expect(error).toBeNull();
+
+    const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown>;
+    expect(row).toBeTruthy();
+    expect(row.group_name).toBe('同步測試');
+    expect(Number(row.member_count)).toBeGreaterThan(0);
+    expect(Object.keys(row).sort()).toEqual(['group_id', 'group_name', 'member_count']);
+
+    // 就算知道了 group_id，仍然讀不到群組裡的任何內容
+    const { data: expenses } = await stranger.client
+      .from('expenses')
+      .select('id')
+      .eq('group_id', row.group_id as string);
+    expect(expenses).toEqual([]);
+
+    const { data: members } = await stranger.client
+      .from('group_members')
+      .select('id')
+      .eq('group_id', row.group_id as string);
+    expect(members).toEqual([]);
+  });
+
+  it('無效的邀請碼查不到東西', async () => {
+    const stranger = await newDevice();
+    const { data, error } = await stranger.client.rpc('peek_invite', {
+      invite_code: 'NOSUCHCODE99',
+    });
+    expect(error).toBeNull();
+    expect(Array.isArray(data) ? data.length : data).toBeFalsy();
+  });
+
+  it('已撤銷的邀請碼查不到，也加入不了', async () => {
+    const code = `RV${uuid().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    const inviteId = uuid();
+    await phone.from('group_invites').insert({
+      id: inviteId,
+      group_id: groupId,
+      code,
+      created_by: userId,
+    });
+    await phone
+      .from('group_invites')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', inviteId);
+
+    const stranger = await newDevice();
+    const { data } = await stranger.client.rpc('peek_invite', { invite_code: code });
+    expect(Array.isArray(data) ? data.length : data).toBeFalsy();
+
+    const joined = await stranger.client.rpc('join_group_by_code', {
+      invite_code: code,
+      member_name: '想混進來的',
+    });
+    expect(joined.error).not.toBeNull();
+  });
+
   it('幽靈成員可以被記帳（沒有帳號也算一份）', async () => {
     const expenseId = uuid();
     await phone.from('expenses').upsert({

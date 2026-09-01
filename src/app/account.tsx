@@ -1,6 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import {
   confirmEmailBinding,
@@ -29,12 +29,13 @@ import {
   Title,
 } from '@/ui/components';
 import { Avatar } from '@/ui/Avatar';
-import { spacing } from '@/ui/theme';
+import { spacing, useTheme } from '@/ui/theme';
 
 type Stage = 'idle' | 'bindCode' | 'recoverCode';
 
 export default function AccountScreen() {
   const router = useRouter();
+  const t = useTheme();
   const [identity, setIdentity] = useState<Identity | null | undefined>(undefined);
   const [name, setName] = useState('');
 
@@ -78,7 +79,21 @@ export default function AccountScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: '帳號' }} />
+      {/* 這個畫面常常是從 Email 驗證連結直接進來的，那種情況沒有上一頁。
+          右上角固定放一個「完成」，不依賴瀏覽歷史也離得開。 */}
+      <Stack.Screen
+        options={{
+          title: '帳號',
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.replace('/')}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={{ paddingHorizontal: 4 }}>
+              <Text style={{ color: t.signal, fontSize: 16, fontWeight: '600' }}>完成</Text>
+            </Pressable>
+          ),
+        }}
+      />
 
       <Title>帳號</Title>
 

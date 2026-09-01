@@ -1,8 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Platform, Share, View } from 'react-native';
 
+import { inviteLinkFor } from '@/data/invites';
 import { repository, useGroup } from '@/data/repository';
 import { getUserId } from '@/data/supabase';
 import {
@@ -14,6 +15,7 @@ import {
   Divider,
   Field,
   Heading,
+  Label,
   Loading,
   Row,
   Screen,
@@ -86,36 +88,85 @@ export default function MembersScreen() {
 
       <Card>
         <Heading>邀請朋友加入</Heading>
-        <Caption>產生邀請碼需要連線。朋友在自己的 App 裡輸入這組碼就能加入。</Caption>
         {inviteCode ? (
-          <View style={{ gap: spacing.sm }}>
-            <Title>{inviteCode}</Title>
-            <Button
-              label={copied ? '已複製' : '複製邀請碼'}
-              variant="secondary"
-              onPress={async () => {
-                await Clipboard.setStringAsync(inviteCode);
-                setCopied(true);
-              }}
-            />
+          <View>
+            <Label>邀請連結</Label>
+            <View style={{ marginTop: spacing.sm }}>
+              <Body style={{ fontSize: 14 }}>{inviteLinkFor(inviteCode)}</Body>
+            </View>
+            <View style={{ marginTop: spacing.md }}>
+              <Button
+                label="分享連結"
+                onPress={async () => {
+                  const link = inviteLinkFor(inviteCode);
+                  const message = `加入「${snapshot.group.name}」一起分帳：
+${link}`;
+                  try {
+                    if (Platform.OS === 'web') {
+                      // 手機瀏覽器有原生分享；桌機沒有就退回複製
+                      const nav = globalThis.navigator as Navigator & {
+                        share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
+                      };
+                      if (nav?.share) {
+                        await nav.share({ title: snapshot.group.name, text: message, url: link });
+                      } else {
+                        await Clipboard.setStringAsync(link);
+                        setCopied(true);
+                      }
+                    } else {
+                      await Share.share({ message });
+                    }
+                  } catch {
+                    // 使用者按取消不算錯誤，不用提示
+                  }
+                }}
+              />
+            </View>
+            <View style={{ marginTop: spacing.sm }}>
+              <Button
+                label={copied ? '已複製連結' : '複製連結'}
+                variant="secondary"
+                onPress={async () => {
+                  await Clipboard.setStringAsync(inviteLinkFor(inviteCode));
+                  setCopied(true);
+                }}
+              />
+            </View>
+            <View style={{ marginTop: spacing.lg }}>
+              <Label>或直接給邀請碼</Label>
+              <View style={{ marginTop: spacing.xs }}>
+                <Title>{inviteCode}</Title>
+              </View>
+              <View style={{ marginTop: spacing.xs }}>
+                <Caption>已經裝了 App 的朋友，在 App 裡輸入這組碼加入比較好。</Caption>
+              </View>
+            </View>
           </View>
         ) : (
-          <Button
-            label="產生邀請碼"
-            busy={busy}
-            onPress={async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                setInviteCode(await repository.createInvite(snapshot.group.id, myUserId));
-                setCopied(false);
-              } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
+          <View>
+            <Caption>
+              產生一組邀請連結傳給朋友。他們點開後填名字、確認要加入的群組就完成了，
+              不必先安裝任何東西。需要連線。
+            </Caption>
+            <View style={{ marginTop: spacing.md }}>
+              <Button
+                label="產生邀請連結"
+                busy={busy}
+                onPress={async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    setInviteCode(await repository.createInvite(snapshot.group.id, myUserId));
+                    setCopied(false);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            </View>
+          </View>
         )}
       </Card>
 
