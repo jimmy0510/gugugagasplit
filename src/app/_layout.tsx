@@ -1,8 +1,10 @@
+import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, Text, useColorScheme } from 'react-native';
 
+import { configureNotifications, groupIdFromNotification, registerPushToken } from '@/data/push';
 import { repository } from '@/data/repository';
 import { ensureSignedIn } from '@/data/supabase';
 import { Body, Card, Loading, Screen, Title } from '@/ui/components';
@@ -45,10 +47,29 @@ interface Boot {
   error?: string;
 }
 
+// 前景收到通知也要跳出來、Android 的通知頻道也要先建好。
+// 放在模組層而不是 effect 裡：處理器必須在任何通知抵達之前就位。
+configureNotifications();
+
 export default function RootLayout() {
   const t = useTheme();
+  const router = useRouter();
   const scheme = useColorScheme();
   const [boot, setBoot] = useState<Boot>({ ready: false });
+
+  /**
+   * 點通知進來的那一則。
+   *
+   * 用 useLastNotificationResponse 而不是監聽事件：App 完全沒在跑的時候
+   * 點通知啟動，事件在畫面掛載前就發生了，監聽器會錯過；這個 hook 會把
+   * 「啟動的原因」補給你。
+   */
+  const tapped = Notifications.useLastNotificationResponse();
+
+  useEffect(() => {
+    const groupId = groupIdFromNotification(tapped ?? null);
+    if (groupId) router.push(`/group/${groupId}`);
+  }, [tapped, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +79,9 @@ export default function RootLayout() {
         await repository.init();
         const userId = await ensureSignedIn();
         if (!cancelled) setBoot({ ready: true, userId });
+        // 不 await：拿推播位址要跟系統要權限，可能停在對話框上等使用者，
+        // 沒理由讓整個 App 陪它一起等
+        void registerPushToken(userId);
       } catch (err) {
         if (!cancelled) {
           setBoot({
@@ -75,7 +99,7 @@ export default function RootLayout() {
 
   if (boot.error) {
     return (
-      <Screen>
+      <Screen safeTop>
         <Title>啟動失敗</Title>
         <Card>
           <Body>{boot.error}</Body>
@@ -87,7 +111,7 @@ export default function RootLayout() {
 
   if (!boot.ready) {
     return (
-      <Screen>
+      <Screen safeTop>
         <Loading label="準備中…" />
       </Screen>
     );

@@ -19,7 +19,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.gugugagasplit.app"
+      "package": "com.gugugagasplit.app",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      },
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "single",
@@ -35,7 +39,14 @@
           "imageWidth": 240
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#E08B62"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -46,6 +57,9 @@
       "eas": {
         "projectId": "150afa41-210a-47e0-a5cc-d1a4a85a747c"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/150afa41-210a-47e0-a5cc-d1a4a85a747c"
     }
   }
 }
