@@ -492,6 +492,20 @@ export function updateGroup(
   kick();
 }
 
+/**
+ * 把「這個群組已經被刪掉」立刻寫進本地。
+ *
+ * 刪除本身走 RPC 直接打伺服器（身分要在伺服器端驗），所以不必排進 outbox。
+ * 但畫面讀的是本地 SQLite，而 refresh() 在原生端只是踢一下同步引擎就回傳、
+ * 不等它拉完——不先寫本地的話，回到首頁那個群組還留在切換列上，
+ * 要等下一輪拉取才消失，看起來就像慢一拍。
+ */
+export function markGroupDeleted(groupId: string): void {
+  const ts = now();
+  db.update(groups).set({ deletedAt: ts, updatedAt: ts }).where(eq(groups.id, groupId)).run();
+  bump();
+}
+
 export function deleteExpense(expenseId: string, groupId: string): void {
   const ts = now();
   sqlite.withTransactionSync(() => {
@@ -662,5 +676,9 @@ export async function joinByCode(code: string, memberName: string): Promise<stri
     member_name: memberName,
   });
   if (error) throw new Error(error.message.includes('邀請碼') ? error.message : `加入失敗：${error.message}`);
+
+  // 成員列是伺服器建的，本地什麼都沒有。不踢一下的話這個群組要等到
+  // 下一輪同步才會出現，剛加入的人會先看到「找不到這個群組」。
+  kick();
   return data as string;
 }

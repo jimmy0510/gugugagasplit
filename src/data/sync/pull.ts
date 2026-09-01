@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 
+import { bump } from '../changes';
 import { db, sqlite } from '../db';
 import {
   expensePayers,
@@ -243,5 +244,11 @@ export async function pullAll(): Promise<Record<string, number>> {
     counts[spec.name] = await pullTable(spec);
   }
   counts.avatars = await pullAvatars();
+
+  // 拉進來的東西要通知畫面，否則寫進了本地資料庫也沒人知道：
+  // 別人記的帳、自己在網頁版改的東西、被刪掉的群組，全都要等到
+  // 某個畫面重新掛載才會出現。看起來就像「App 少更新一拍」。
+  if (Object.values(counts).some((n) => n > 0)) bump();
+
   return counts;
 }

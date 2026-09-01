@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { COMMON_CURRENCIES } from '@/domain';
@@ -57,17 +57,28 @@ export default function HomeScreen() {
   useGroupListRealtime(userId);
 
   useEffect(() => {
-    void getDisplayName().then((stored) => setName(stored ?? ''));
     void getGroupOrder().then(setOrder);
-    void getIdentity().then(async (identity) => {
-      setEmailBound(Boolean(identity?.email));
-      setUserId(identity?.userId);
-      if (!identity?.userId) return;
-      const path = avatarPathFor(identity.userId);
-      const map = await avatarUrls([path]);
-      setAvatarUri(map[path] ?? null);
-    });
   }, []);
+
+  /**
+   * 名字、頭像、Email 綁定狀態都在帳號設定頁改，改完按「上一步」回到這裡時
+   * 首頁並沒有重新掛載，只在 mount 讀一次的話畫面會停在舊值——
+   * 名字沒變、頭像沒換、綁完 email 那條警告還掛在上面。
+   * 改成每次重新取得焦點都讀一次。
+   */
+  useFocusEffect(
+    useCallback(() => {
+      void getDisplayName().then((stored) => setName(stored ?? ''));
+      void getIdentity().then(async (identity) => {
+        setEmailBound(Boolean(identity?.email));
+        setUserId(identity?.userId);
+        if (!identity?.userId) return;
+        const path = avatarPathFor(identity.userId);
+        const map = await avatarUrls([path]);
+        setAvatarUri(map[path] ?? null);
+      });
+    }, []),
+  );
 
   /**
    * 開啟時要顯示哪個群組：最近一筆帳目所屬的那個。
@@ -97,6 +108,21 @@ export default function HomeScreen() {
     );
   }, [groups, order]);
 
+  /**
+   * 真正要顯示的群組。
+   *
+   * 選中的群組可能已經不在清單裡了——自己把它刪掉，或被別人移出群組。
+   * 這裡用「算出來的」而不是去清掉 selectedId，因為剛建立群組時
+   * select() 會先指向新群組、reload() 還沒回來，那一瞬間它本來就不在清單裡；
+   * 載入中就先維持原選擇，載完了才退回第一個。
+   */
+  const activeId =
+    selectedId && ordered.some((g) => g.id === selectedId)
+      ? selectedId
+      : loading
+        ? selectedId
+        : ordered[0]?.id;
+
   const select = (groupId: string) => {
     setSelectedId(groupId);
     setAdd('none');
@@ -119,7 +145,7 @@ export default function HomeScreen() {
       header={
         <GroupStrip
           groups={ordered}
-          selectedId={selectedId}
+          selectedId={activeId}
           onSelect={select}
           onReorder={reorder}
           onAdd={() => setAdd(add === 'none' ? 'pick' : 'none')}
@@ -168,8 +194,8 @@ export default function HomeScreen() {
         <Loading />
       ) : !hasGroups ? (
         <Empty title="還沒有任何群組" hint="建立一個，或用朋友給的邀請碼加入" />
-      ) : selectedId ? (
-        <GroupBody groupId={selectedId} />
+      ) : activeId ? (
+        <GroupBody groupId={activeId} />
       ) : (
         <Loading />
       )}

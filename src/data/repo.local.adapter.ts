@@ -2,7 +2,7 @@ import { migrate } from './db';
 import { deleteGroup, removeMember } from './invites';
 import * as local from './repo.local';
 import type { Repository } from './repository-types';
-import { kick, start as startSync } from './sync/engine';
+import { kick, start as startSync, syncNow } from './sync/engine';
 import { repairLegacyDeletes } from './sync/outbox';
 
 /**
@@ -20,9 +20,10 @@ const adapter: Repository = {
     startSync();
   },
 
-  // 原生端讀的是本地 SQLite，所以要先讓同步引擎把變更拉進來
+  // 原生端讀的是本地 SQLite，所以要先讓同步引擎把變更拉進來。
+  // 等它跑完再回來，呼叫端才有辦法知道「刷新完了」。
   async refresh() {
-    kick();
+    await syncNow();
   },
 
   async listGroups() {
@@ -71,8 +72,19 @@ const adapter: Repository = {
 
   createInvite: local.createInvite,
   joinByCode: local.joinByCode,
-  removeMember,
-  deleteGroup,
+
+  async removeMember(memberId) {
+    await removeMember(memberId);
+    // 移除是伺服器端做的，本地那列還在。踢一輪同步把它拉回來，
+    // 不然畫面上那個人要等到下次同步才消失。
+    kick();
+  },
+
+  async deleteGroup(groupId) {
+    await deleteGroup(groupId);
+    // 伺服器答應了才動本地，順序反過來的話被拒絕時畫面會少一個群組
+    local.markGroupDeleted(groupId);
+  },
 };
 
 export default adapter;

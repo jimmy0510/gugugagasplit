@@ -58,9 +58,19 @@ export function getStatus(): SyncStatus {
   return status;
 }
 
-/** 本地剛寫入了東西，盡快推出去 */
+/** 本地剛寫入了東西，盡快推出去。不等結果。 */
 export function kick(): void {
   void runOnce();
+}
+
+/**
+ * 使用者主動要求更新，等這一輪跑完才回來。
+ *
+ * 跟 kick() 的差別只在「等不等」。畫面上有刷新鍵時一定要用這個，
+ * 否則按下去立刻就顯示「已刷新」，其實資料還在路上。
+ */
+export async function syncNow(): Promise<void> {
+  await runOnce();
 }
 
 async function runOnce(): Promise<void> {

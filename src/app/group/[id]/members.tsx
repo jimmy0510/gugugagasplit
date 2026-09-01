@@ -353,9 +353,9 @@ ${link}`;
                       setError(null);
                       try {
                         await repository.deleteGroup(snapshot.group.id);
-                        // 原生端讀的是本地 SQLite，要先讓它把這次刪除拉回來，
-                        // 不然回到首頁那個群組還會在列上。
-                        await repository.refresh();
+                        // 順便踢一下同步，把其他人這段時間的變更也一起拉回來。
+                        // 不等它——這次刪除本身資料層已經先寫進本地了。
+                        void repository.refresh();
                         router.replace('/');
                       } catch (err) {
                         setError(err instanceof Error ? err.message : String(err));
