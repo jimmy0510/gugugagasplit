@@ -1,7 +1,8 @@
 import { asc, eq, sql } from 'drizzle-orm';
 
 import { db } from '../db';
-import { outbox } from '../schema.local';
+import { outbox, receipts } from '../schema.local';
+import { bump } from '../changes';
 import { uploadReceipt } from '../receipts';
 import { supabase } from '../supabase';
 
@@ -113,11 +114,19 @@ async function runOp(
     return (await supabase.rpc(target, payload)).error;
   }
   try {
+    const receiptId = payload.receiptId as string;
     await uploadReceipt({
       localUri: payload.localUri as string,
-      receiptId: payload.receiptId as string,
+      receiptId,
       storagePath: payload.storagePath as string,
     });
+
+    // 上傳成功後把本地路徑清掉。uploadReceipt 已經刪了本地暫存檔，
+    // 但資料列還留著那個路徑，畫面就會一直顯示「待上傳」，
+    // 讓人以為上傳失敗——其實檔案早就到雲端了。
+    db.update(receipts).set({ localPath: null }).where(eq(receipts.id, receiptId)).run();
+    bump();
+
     return null;
   } catch (err) {
     return { message: err instanceof Error ? err.message : String(err) };
