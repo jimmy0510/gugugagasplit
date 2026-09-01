@@ -1,4 +1,4 @@
-import { Children, isValidElement, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -29,20 +29,49 @@ import { hairline, maxContentWidth, radius, spacing, tabularNums, useTheme, type
  * 一旦畫面佈局與原生 view 的實際框不一致就會這樣。gap 在新架構下
  * 是相對新的實作，是最可能的來源，所以在版面容器上避開它。
  */
-function spaced(children: ReactNode, gapSize: number): ReactNode {
-  const items = Children.toArray(children).filter(Boolean);
-  return items.map((child, index) =>
-    isValidElement(child) && index > 0 ? (
-      <View key={child.key ?? index} style={{ marginTop: gapSize }}>
-        {child}
+export function spaced(children: ReactNode, gapSize: number): ReactNode {
+  const items = flatten(children).filter((item) => Boolean(item.node));
+  return items.map((item, index) =>
+    isValidElement(item.node) && index > 0 ? (
+      <View key={item.key} style={{ marginTop: gapSize }}>
+        {item.node}
       </View>
     ) : (
-      child
+      item.node
     ),
   );
 }
 
-export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
+/**
+ * 攤平 Fragment，讓 `{條件 ? <>A B</> : null}` 裡的每一項也拿得到間距。
+ *
+ * 不攤平的話整個 Fragment 只算一個孩子，裡面的元素之間一點空隙都沒有——
+ * 帳號頁的分隔線就這樣直接黏在下一個欄位的標籤上。這種漏掉很難從程式碼看出來，
+ * 因為排版看起來完全正常，只有畫面上少了一道間距。
+ *
+ * key 沿用 Children.toArray 給的那組，Fragment 內的再加上它自己的 key 當前綴，
+ * 這樣不同 Fragment 裡的 ".0" 才不會撞在一起，而頂層元素的 key 完全不變
+ * （支出列表靠它辨識每一列，換成位置序號會讓刪一筆之後整串重掛）。
+ */
+function flatten(children: ReactNode, prefix = ''): { node: ReactNode; key: string }[] {
+  return Children.toArray(children).flatMap((child, index) => {
+    const key = `${prefix}${isValidElement(child) ? (child.key ?? index) : index}`;
+    return isValidElement(child) && child.type === Fragment
+      ? flatten((child.props as { children?: ReactNode }).children, `${key}/`)
+      : [{ node: child, key }];
+  });
+}
+
+export function Screen({
+  children,
+  scroll = true,
+  /** 釘在最上面、不隨內容捲動的一列（首頁用來放群組切換列） */
+  header,
+}: {
+  children: ReactNode;
+  scroll?: boolean;
+  header?: ReactNode;
+}) {
   const t = useTheme();
   const inner = (
     <View
@@ -58,6 +87,21 @@ export function Screen({ children, scroll = true }: { children: ReactNode; scrol
   );
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top', 'bottom']}>
+      {header ? (
+        // 分隔線要橫貫整個畫面，內容才置中收在 maxContentWidth 裡
+        <View style={{ borderBottomWidth: hairline, borderBottomColor: t.line }}>
+          <View
+            style={{
+              width: '100%',
+              maxWidth: maxContentWidth,
+              alignSelf: 'center',
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+            }}>
+            {header}
+          </View>
+        </View>
+      ) : null}
       {scroll ? (
         // keyboardShouldPersistTaps="always"：鍵盤開著時點按鈕要直接觸發。
         // 用 "handled" 在 Android 上第一次點常常只會收起鍵盤，
@@ -198,7 +242,7 @@ export function Button({
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: 48,
-        width: '100%',
+        // 不設 width：直排時本來就會自動撐滿，設了反而會在橫排時撐出容器
         overflow: 'hidden',
       })}>
       {/* 內容一律不吃觸控事件，確保命中的一定是 Pressable 本身 */}
@@ -209,6 +253,24 @@ export function Button({
           <Text style={{ color: fg, fontWeight: '600', fontSize: 15, letterSpacing: -0.2 }}>{label}</Text>
         )}
       </View>
+    </Pressable>
+  );
+}
+
+/**
+ * 文字連結。用在「切換一個次要區塊」這種場合——
+ * 那不是主要動作，用整條按鈕會搶走視覺重心，也容易撐爆橫排容器。
+ */
+export function LinkButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const t = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+      <Text style={{ color: t.signal, fontSize: 14, fontWeight: '600', letterSpacing: -0.2 }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

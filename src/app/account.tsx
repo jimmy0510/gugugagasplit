@@ -147,8 +147,15 @@ export default function AccountScreen() {
 
       <Card>
         <Row>
-          <Heading>{bound ? '已綁定 Email' : '尚未綁定 Email'}</Heading>
-          {bound ? <Caption tone="positive">安全</Caption> : <Caption tone="negative">有風險</Caption>}
+          {/* 標題吃剩下的寬度並讓它自己換行，狀態才不會被擠出卡片外 */}
+          <View style={{ flex: 1 }}>
+            <Heading>{bound ? '已綁定 Email' : '尚未綁定 Email'}</Heading>
+          </View>
+          {bound ? (
+            <Caption tone="positive">安全</Caption>
+          ) : (
+            <Caption tone="negative">未綁定有丟失風險</Caption>
+          )}
         </Row>
 
         {bound ? (
