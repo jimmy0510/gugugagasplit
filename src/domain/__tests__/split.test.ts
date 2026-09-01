@@ -1,3 +1,4 @@
+import { formatMoney, parseMoney } from '../money';
 import { allocate, computeSplits, PERCENT_SCALE, type SplitInput } from '../split';
 
 const members = (...ids: string[]): SplitInput[] => ids.map((memberId) => ({ memberId }));
@@ -35,7 +36,7 @@ describe('allocate 最大餘數法', () => {
 });
 
 describe('computeSplits', () => {
-  it('平均分：USD 100.00 分 3 人 = 33.34 / 33.33 / 33.33', () => {
+  it('平均分：100.00 分 3 人 = 33.34 / 33.33 / 33.33', () => {
     const result = computeSplits(10000, 'equal', members('a', 'b', 'c'));
     expect(result).toEqual([
       { memberId: 'a', amountMinor: 3334 },
@@ -45,9 +46,34 @@ describe('computeSplits', () => {
     expect(sum(result.map((r) => r.amountMinor))).toBe(10000);
   });
 
-  it('平均分：TWD 100 分 3 人 = 34 / 33 / 33', () => {
-    const result = computeSplits(100, 'equal', members('a', 'b', 'c'));
-    expect(result.map((r) => r.amountMinor)).toEqual([34, 33, 33]);
+  /**
+   * 從使用者打的字一路走到畫面上的字。
+   *
+   * 中間任何一段偷偷改回整數（幣別小數位數、輸入解析、顯示格式）都會被這裡抓到——
+   * 曾經 TWD 是 0 位，NT$100 分 3 人只能 34/33/33，固定有人多付一塊。
+   */
+  it('平分算到分：NT$100 分 3 人 = 33.34 / 33.33 / 33.33', () => {
+    const total = parseMoney('100', 'TWD');
+    const result = computeSplits(total, 'equal', members('a', 'b', 'c'));
+
+    expect(result.map((r) => formatMoney(r.amountMinor, 'TWD'))).toEqual([
+      '33.34',
+      '33.33',
+      '33.33',
+    ]);
+    expect(sum(result.map((r) => r.amountMinor))).toBe(total);
+  });
+
+  it('平分算到分：¥1,000 分 3 人也切到小數', () => {
+    const total = parseMoney('1000', 'JPY');
+    const result = computeSplits(total, 'equal', members('a', 'b', 'c'));
+
+    expect(result.map((r) => formatMoney(r.amountMinor, 'JPY'))).toEqual([
+      '333.34',
+      '333.33',
+      '333.33',
+    ]);
+    expect(sum(result.map((r) => r.amountMinor))).toBe(total);
   });
 
   it('依權重：情侶算 2、單身算 1', () => {
