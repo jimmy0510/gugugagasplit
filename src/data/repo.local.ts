@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { computeSplits, type SplitInput, type SplitType } from '../domain';
 import { bump } from './changes';
@@ -54,6 +54,25 @@ export function listGroups(): Group[] {
       createdBy: g.createdBy,
       archivedAt: g.archivedAt,
     }));
+}
+
+export function newestActivityGroupId(): string | null {
+  const newest = <T extends typeof expenses | typeof transfers>(table: T) =>
+    db
+      .select({ groupId: table.groupId, updatedAt: table.updatedAt })
+      .from(table)
+      .where(isNull(table.deletedAt))
+      .orderBy(desc(table.updatedAt))
+      .limit(1)
+      .get();
+
+  const rows = [newest(expenses), newest(transfers)].filter(
+    (r): r is { groupId: string; updatedAt: string } => Boolean(r),
+  );
+  if (rows.length === 0) return null;
+
+  rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return rows[0].groupId;
 }
 
 export function loadGroup(groupId: string): GroupSnapshot | null {
@@ -438,6 +457,39 @@ function replaceChildren(input: {
       },
     });
   }
+}
+
+export function updateGroup(
+  groupId: string,
+  patch: { name?: string; defaultCurrency?: string },
+): void {
+  // 本地欄位與伺服器欄位名稱不同，兩邊各存一份對照
+  const local: { name?: string; defaultCurrency?: string } = {};
+  const remote: Record<string, string> = {};
+  if (patch.name !== undefined) {
+    local.name = patch.name;
+    remote.name = patch.name;
+  }
+  if (patch.defaultCurrency !== undefined) {
+    local.defaultCurrency = patch.defaultCurrency;
+    remote.default_currency = patch.defaultCurrency;
+  }
+  if (Object.keys(remote).length === 0) return;
+
+  const ts = now();
+  sqlite.withTransactionSync(() => {
+    db.update(groups)
+      .set({ ...local, updatedAt: ts })
+      .where(eq(groups.id, groupId))
+      .run();
+    enqueue({
+      op: 'update',
+      target: 'groups',
+      payload: { id: groupId, values: remote },
+    });
+  });
+  bump();
+  kick();
 }
 
 export function deleteExpense(expenseId: string, groupId: string): void {

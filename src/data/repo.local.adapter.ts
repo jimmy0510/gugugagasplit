@@ -1,5 +1,5 @@
 import { migrate } from './db';
-import { removeMember } from './invites';
+import { deleteGroup, removeMember } from './invites';
 import * as local from './repo.local';
 import type { Repository } from './repository-types';
 import { kick, start as startSync } from './sync/engine';
@@ -29,6 +29,10 @@ const adapter: Repository = {
     return local.listGroups();
   },
 
+  async newestActivityGroupId() {
+    return local.newestActivityGroupId();
+  },
+
   async loadGroup(groupId) {
     return local.loadGroup(groupId);
   },
@@ -39,6 +43,10 @@ const adapter: Repository = {
 
   async addMember(input) {
     return local.addMember(input);
+  },
+
+  async updateGroup(groupId, patch) {
+    local.updateGroup(groupId, patch);
   },
 
   async saveExpense(input) {
@@ -64,6 +72,7 @@ const adapter: Repository = {
   createInvite: local.createInvite,
   joinByCode: local.joinByCode,
   removeMember,
+  deleteGroup,
 };
 
 export default adapter;

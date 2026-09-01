@@ -1,9 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Share, View } from 'react-native';
 
-import { computeNetBalances, currenciesOf, formatWithCurrency } from '@/domain';
+import { COMMON_CURRENCIES, computeNetBalances, currenciesOf, formatWithCurrency } from '@/domain';
 import { inviteLinkFor } from '@/data/invites';
 import { useGroupRealtime } from '@/data/realtime';
 import { repository, useGroup } from '@/data/repository';
@@ -21,12 +21,14 @@ import {
   Loading,
   Row,
   Screen,
+  Segmented,
   Title,
 } from '@/ui/components';
 import { Avatar, AvatarUrlProvider } from '@/ui/Avatar';
 import { spacing } from '@/ui/theme';
 
 export default function MembersScreen() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: snapshot, loading, reload } = useGroup(id);
 
@@ -34,16 +36,23 @@ export default function MembersScreen() {
   useGroupRealtime(id);
 
   const [newName, setNewName] = useState('');
+  // null = 使用者還沒動過，顯示伺服器上的名字。存檔後歸零，重新跟著伺服器走。
+  const [groupName, setGroupName] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (loading && !snapshot) return <Screen><Loading /></Screen>;
   if (!snapshot) return <Screen><Banner>找不到群組</Banner></Screen>;
 
   const myUserId = getUserId();
+
+  // 名稱輸入框的當前值：使用者動過就用他打的，沒動過就跟著伺服器
+  const nameDraft = groupName ?? snapshot.group.name;
 
   // 只有群組建立者能移除成員（伺服器端也會再擋一次）
   const me = snapshot.members.find((m) => m.userId === myUserId);
@@ -64,10 +73,11 @@ export default function MembersScreen() {
   return (
     <AvatarUrlProvider members={snapshot.members}>
     <Screen>
-      <Stack.Screen options={{ title: `${snapshot.group.name} · 成員` }} />
+      <Stack.Screen options={{ title: `${snapshot.group.name} · 群組` }} />
 
-      <Title>成員</Title>
+      <Title>群組</Title>
       <Card>
+        <Heading>成員</Heading>
         {snapshot.members.map((member, index) => {
           const owing = currenciesOf(balances[member.id]);
           const settled = owing.length === 0;
@@ -96,14 +106,15 @@ export default function MembersScreen() {
                   {settled ? (
                     <Caption>已結清</Caption>
                   ) : (
-                    owing.map((c) => (
-                      <Caption key={c} tone="negative">
-                        {`${balances[member.id][c] > 0 ? '應收 ' : '應付 '}${formatWithCurrency(
-                          Math.abs(balances[member.id][c]),
-                          c,
-                        )}`}
-                      </Caption>
-                    ))
+                    owing.map((c) => {
+                      const amount = balances[member.id][c];
+                      return (
+                        // 應收綠、應付紅，跟群組頁的結餘同一套顏色
+                        <Caption key={c} tone={amount > 0 ? 'positive' : 'negative'}>
+                          {`${amount > 0 ? '應收 ' : '應付 '}${formatWithCurrency(Math.abs(amount), c)}`}
+                        </Caption>
+                      );
+                    })
                   )}
                 </View>
               </Row>
@@ -155,6 +166,62 @@ export default function MembersScreen() {
             </View>
           );
         })}
+      </Card>
+
+      <Card>
+        <Heading>群組名稱</Heading>
+        <Field
+          label="名稱"
+          value={nameDraft}
+          onChangeText={setGroupName}
+          placeholder="例如：日本旅遊"
+          maxLength={40}
+        />
+        <Button
+          label="改名"
+          busy={renaming}
+          disabled={nameDraft.trim().length === 0 || nameDraft.trim() === snapshot.group.name}
+          onPress={async () => {
+            setRenaming(true);
+            setError(null);
+            try {
+              await repository.updateGroup(snapshot.group.id, {
+                name: nameDraft.trim(),
+              });
+              // 交還給伺服器的值，免得存檔後畫面停在本地那份
+              setGroupName(null);
+              reload();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+            } finally {
+              setRenaming(false);
+            }
+          }}
+        />
+        <Caption>群組裡的每個人都會看到新名字。</Caption>
+      </Card>
+
+      <Card>
+        <Heading>主幣別</Heading>
+        <Caption>
+          新增支出時預設用這個幣別，群組頁的結餘也以它排序。
+          換幣別不會動到任何既有帳目——每筆支出都留在它記帳時的幣別裡。
+        </Caption>
+        <View style={{ marginTop: spacing.md }}>
+          <Segmented
+            options={COMMON_CURRENCIES.slice(0, 6).map((c) => ({ value: c, label: c }))}
+            value={snapshot.group.defaultCurrency}
+            onChange={(currency) => {
+              setError(null);
+              repository
+                .updateGroup(snapshot.group.id, { defaultCurrency: currency })
+                .then(reload)
+                .catch((err: unknown) =>
+                  setError(err instanceof Error ? err.message : String(err)),
+                );
+            }}
+          />
+        </View>
       </Card>
 
       <Card>
@@ -264,6 +331,49 @@ ${link}`;
           </View>
         )}
       </Card>
+
+      {isOwner ? (
+        <Card>
+          <Heading>刪除群組</Heading>
+          {confirmDelete ? (
+            <>
+              <Caption>
+                {`確定刪除「${snapshot.group.name}」？群組會從所有成員的清單裡消失，裡面的帳目也一起帶走。`}
+              </Caption>
+              <Row>
+                <View style={{ flex: 1 }}>
+                  <Button label="取消" variant="secondary" onPress={() => setConfirmDelete(false)} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="確定刪除"
+                    busy={busy}
+                    onPress={async () => {
+                      setBusy(true);
+                      setError(null);
+                      try {
+                        await repository.deleteGroup(snapshot.group.id);
+                        // 原生端讀的是本地 SQLite，要先讓它把這次刪除拉回來，
+                        // 不然回到首頁那個群組還會在列上。
+                        await repository.refresh();
+                        router.replace('/');
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : String(err));
+                        setBusy(false);
+                      }
+                    }}
+                  />
+                </View>
+              </Row>
+            </>
+          ) : (
+            <>
+              <Caption>只有你（建立者）看得到這個按鈕。刪掉之後所有成員都會看不到這個群組。</Caption>
+              <Button label="刪除群組" variant="secondary" onPress={() => setConfirmDelete(true)} />
+            </>
+          )}
+        </Card>
+      ) : null}
 
       {error ? <Banner>{error}</Banner> : null}
     </Screen>

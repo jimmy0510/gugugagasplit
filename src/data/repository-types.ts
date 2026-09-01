@@ -20,6 +20,14 @@ export interface Repository {
   refresh(): Promise<void>;
 
   listGroups(): Promise<Group[]>;
+
+  /**
+   * 最近一筆帳目（支出或還款）屬於哪個群組。沒有任何帳目就回傳 null。
+   *
+   * 首頁用它決定一開啟要顯示哪一個群組——正在跑的那趟旅行永遠是
+   * 最新有動靜的那個，直接落在那裡比記住「上次看的」更貼近實際需要。
+   */
+  newestActivityGroupId(): Promise<string | null>;
   loadGroup(groupId: string): Promise<GroupSnapshot | null>;
 
   createGroup(input: {
@@ -30,6 +38,14 @@ export interface Repository {
   }): Promise<{ groupId: string; memberId: string }>;
 
   addMember(input: { groupId: string; name: string; userId?: string }): Promise<string>;
+
+  /**
+   * 改群組本身的欄位（名稱、主幣別）。只傳要改的那些。
+   *
+   * 換主幣別只影響「新增支出的預設幣別」與「結餘排序依據」，
+   * 不會動到任何既有帳目——每筆支出永遠留在它自己記帳時的幣別裡。
+   */
+  updateGroup(groupId: string, patch: { name?: string; defaultCurrency?: string }): Promise<void>;
 
   saveExpense(input: SaveExpenseInput): Promise<string>;
   deleteExpense(expenseId: string, groupId: string): Promise<void>;
@@ -53,4 +69,7 @@ export interface Repository {
    * 兩個條件都由伺服器端的 RPC 把關，不是靠畫面擋。
    */
   removeMember(memberId: string): Promise<void>;
+
+  /** 刪除整個群組。軟刪除，只有建立者做得到（伺服器端會擋） */
+  deleteGroup(groupId: string): Promise<void>;
 }

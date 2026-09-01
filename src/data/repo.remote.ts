@@ -43,6 +43,28 @@ export async function listGroups(): Promise<Group[]> {
   }));
 }
 
+export async function newestActivityGroupId(): Promise<string | null> {
+  // 只要各拿「最新的那一筆」就夠了，不必把全部帳目撈回來排序。
+  // RLS 已經把範圍限制在自己看得到的群組。
+  const newest = (table: 'expenses' | 'transfers') =>
+    supabase
+      .from(table)
+      .select('group_id, updated_at')
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  const [expense, transfer] = await Promise.all([newest('expenses'), newest('transfers')]);
+  const rows = [expense.data, transfer.data].filter(
+    (r): r is { group_id: string; updated_at: string } => Boolean(r),
+  );
+  if (rows.length === 0) return null;
+
+  rows.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  return rows[0].group_id;
+}
+
 export async function loadGroup(groupId: string): Promise<GroupSnapshot | null> {
   const [g, members, expenses, payers, splits, transfers, receipts, profiles] = await Promise.all([
     supabase.from('groups').select('*').eq('id', groupId).is('deleted_at', null).maybeSingle(),
@@ -238,6 +260,20 @@ export async function saveExpense(input: SaveExpenseInput): Promise<string> {
 
   bump();
   return expenseId;
+}
+
+export async function updateGroup(
+  groupId: string,
+  patch: { name?: string; defaultCurrency?: string },
+): Promise<void> {
+  const values: Record<string, string> = {};
+  if (patch.name !== undefined) values.name = patch.name;
+  if (patch.defaultCurrency !== undefined) values.default_currency = patch.defaultCurrency;
+  if (Object.keys(values).length === 0) return;
+
+  const { error } = await supabase.from('groups').update(values).eq('id', groupId);
+  fail('更新群組', error);
+  bump();
 }
 
 export async function deleteExpense(expenseId: string): Promise<void> {

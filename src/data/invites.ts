@@ -48,3 +48,14 @@ export async function removeMember(memberId: string): Promise<void> {
   const { error } = await supabase.rpc('remove_member', { target_member: memberId });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * 刪除群組（軟刪除）。伺服器端會檢查呼叫者是不是群組建立者。
+ *
+ * 跟 removeMember 一樣不走 Repository 的離線分流：這是不可逆的動作，
+ * 排進佇列等連線只會讓人以為刪掉了、下次開又還在。
+ */
+export async function deleteGroup(groupId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_group', { target_group: groupId });
+  if (error) throw new Error(error.message);
+}
