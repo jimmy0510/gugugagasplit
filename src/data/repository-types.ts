@@ -45,7 +45,12 @@ export interface Repository {
   }): Promise<void>;
   removeReceipt(receiptId: string, groupId: string): Promise<void>;
 
-  /** 這兩項一定需要連線，離線時會拋錯 */
+  /** 這三項一定需要連線，離線時會拋錯 */
   createInvite(groupId: string, userId: string): Promise<string>;
   joinByCode(code: string, memberName: string): Promise<string>;
+  /**
+   * 移除成員。只有群組建立者能做，而且對方必須已結清——
+   * 兩個條件都由伺服器端的 RPC 把關，不是靠畫面擋。
+   */
+  removeMember(memberId: string): Promise<void>;
 }

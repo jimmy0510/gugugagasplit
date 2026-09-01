@@ -39,3 +39,12 @@ export async function peekInvite(code: string): Promise<InvitePreview | null> {
     memberCount: Number(row.member_count),
   };
 }
+
+/**
+ * 移除成員。伺服器端會檢查「呼叫者是群組建立者」與「對方已結清」，
+ * 任一不成立就拋錯，錯誤訊息直接來自資料庫，已經是中文。
+ */
+export async function removeMember(memberId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_member', { target_member: memberId });
+  if (error) throw new Error(error.message);
+}

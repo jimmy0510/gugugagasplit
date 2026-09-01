@@ -1,4 +1,5 @@
 import { migrate } from './db';
+import { removeMember } from './invites';
 import * as local from './repo.local';
 import type { Repository } from './repository-types';
 import { kick, start as startSync } from './sync/engine';
@@ -62,6 +63,7 @@ const adapter: Repository = {
 
   createInvite: local.createInvite,
   joinByCode: local.joinByCode,
+  removeMember,
 };
 
 export default adapter;

@@ -1,4 +1,5 @@
 import { bump } from './changes';
+import { removeMember } from './invites';
 import * as remote from './repo.remote';
 import type { Repository } from './repository-types';
 
@@ -26,6 +27,7 @@ const impl: Repository = {
   removeReceipt: async (receiptId) => remote.removeReceipt(receiptId),
   createInvite: remote.createInvite,
   joinByCode: remote.joinByCode,
+  removeMember,
 };
 
 export default impl;
