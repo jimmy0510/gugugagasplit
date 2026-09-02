@@ -83,9 +83,3 @@ export async function registerPushToken(userId: string): Promise<void> {
     // 靜默略過，見上面的說明
   }
 }
-
-/** 點通知帶進來的資料。目前只有「要跳到哪個群組」 */
-export function groupIdFromNotification(response: Notifications.NotificationResponse | null): string | null {
-  const data = response?.notification.request.content.data as { groupId?: string } | undefined;
-  return data?.groupId ?? null;
-}

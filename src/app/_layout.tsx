@@ -1,10 +1,10 @@
-import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, Text, useColorScheme } from 'react-native';
 
-import { configureNotifications, groupIdFromNotification, registerPushToken } from '@/data/push';
+import { configureNotifications, registerPushToken } from '@/data/push';
+import { useNotificationTap } from '@/data/useNotificationTap';
 import { repository } from '@/data/repository';
 import { ensureSignedIn } from '@/data/supabase';
 import { Body, Card, Loading, Screen, Title } from '@/ui/components';
@@ -57,19 +57,12 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const [boot, setBoot] = useState<Boot>({ ready: false });
 
-  /**
-   * 點通知進來的那一則。
-   *
-   * 用 useLastNotificationResponse 而不是監聽事件：App 完全沒在跑的時候
-   * 點通知啟動，事件在畫面掛載前就發生了，監聽器會錯過；這個 hook 會把
-   * 「啟動的原因」補給你。
-   */
-  const tapped = Notifications.useLastNotificationResponse();
+  // 點通知進來時要跳到的群組。網頁版永遠是 null（那邊沒有推播）
+  const tappedGroupId = useNotificationTap();
 
   useEffect(() => {
-    const groupId = groupIdFromNotification(tapped ?? null);
-    if (groupId) router.push(`/group/${groupId}`);
-  }, [tapped, router]);
+    if (tappedGroupId) router.push(`/group/${tappedGroupId}`);
+  }, [tappedGroupId, router]);
 
   useEffect(() => {
     let cancelled = false;
