@@ -76,6 +76,26 @@ commit;
 
 建置時要加 `EAS_SKIP_AUTO_FINGERPRINT=1`，否則算指紋會卡住。
 
+**EAS Build 只上傳 git 追蹤中的檔案。** 追蹤中但尚未提交的「修改」會一起帶上去，
+但**全新的未追蹤檔案不會**，被 `.gitignore` 擋掉的也不會。所以新增檔案之後
+一定要先 `git add`（或提交）再建置，否則建置機器上根本沒有那個檔——
+新模組會在打包時報 module not found，設定檔則是到編譯階段才炸。
+
+刻意不進版本控制、但建置又需要的檔案（例如 `google-services.json`，
+這個 repo 是公開的），存成 EAS 的檔案型環境變數：
+
+```bash
+npx eas-cli env:set --name GOOGLE_SERVICES_JSON --type file   --value ./google-services.json --visibility secret   --environment preview --environment production
+```
+
+再由 `app.config.js` 讀 `process.env.GOOGLE_SERVICES_JSON`（建置時 EAS 會把檔案
+還原到機器上並把路徑放進那個變數），本機沒有變數就退回專案裡那份。
+
+**從 v1.6.0 起有 OTA（`expo-updates`）。** 純 JS／畫面的改動可以
+`eas update --channel preview` 推出去，使用者開兩次 App 就會換新，不必重裝。
+改到原生層的東西（app 圖示、啟動畫面、權限、新增原生套件、升 SDK）仍然要重建，
+那種時候要把 `app.json` 的 `version` 往上跳，舊安裝檔才不會收到跟它不相容的更新。
+
 ## 專案結構
 
 - `src/domain/` — 純 TypeScript，不 import React Native 或 Supabase。
@@ -113,3 +133,11 @@ preset——那會架起 React Native 模擬環境，把 fetch 換掉，連不�
   增量同步的游標建立在它上面，手機時鐘不準會讓資料悄悄消失。
 - **停用的按鈕要看起來就是停用的**，否則使用者會以為按鈕壞了。
   能給明確錯誤訊息時，寧可讓他按下去然後說明缺什麼。
+- **原生端寫完資料要自己通知畫面**：畫面讀的是本地 SQLite，靠 `bump()` 才會重讀。
+  同步拉取（`pullAll`）與任何「直接打伺服器」的操作（RPC、移除成員、刪除群組）
+  都必須自己 `bump()` 或先把結果寫進本地，否則畫面會慢一整拍——
+  看起來像「按了沒反應，做別的事之後才更新」。
+- **有原生標題列的畫面不要再讓一次安全區**：標題列已經把狀態列的高度讓開了，
+  `SafeAreaView` 讀的是整個視窗的內縮值，不知道上面有人讓過，會多出一整條空白。
+- **不要旋轉文字符號當載入動畫**：文字的旋轉軸是排版方框中心，字的墨跡卻不在
+  方框正中央（有側距、又坐在基線上），轉起來會偏心晃動。用圖示字型或自己畫。
