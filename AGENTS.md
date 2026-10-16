@@ -68,6 +68,15 @@ commit;
 
 `set local` 只在該交易有效，不會意外留著。
 
+## 免費方案會自動暫停閒置專案
+
+Supabase 免費方案的專案 7 天沒有足夠活動就會被暫停（暫停後 90 天內可從
+dashboard 手動恢復，之後就救不回來）。`.github/workflows/supabase-keepalive.yml`
+每三天打一次 PostgREST 保持活動，Actions 頁面也能手動觸發。
+
+GitHub 會在 repo 60 天沒有 commit 時停用排程 workflow——收到暫停預告信時，
+先去 Actions 頁面確認這個 workflow 還開著。
+
 ## 建置 APK 要先問過
 
 改完程式先部署網頁版（`npx expo export --platform web` + `npx eas-cli deploy --prod`），
